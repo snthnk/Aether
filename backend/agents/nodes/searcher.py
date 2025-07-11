@@ -5,22 +5,21 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import xml.etree.ElementTree as ET
-from typing import List, Optional
-from llm.llms import llm, llm_creative
-from agents.prompts import (
+from typing import List, Optional, Dict
+from backend.llm.llms import llm, llm_creative
+from backend.agents.prompts import (
     SEARCH_QUERY_PLANNER_PROMPT,
     SEARCH_QUERY_PLANNER_CREATIVE_PROMPT,
     SEARCH_SUMMARIZER_PROMPT,
     VALIDATION_PROMPT
 )
-from langgraph.types import Command
 import pymupdf as fitz
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
-from agents.constants import MIN_VALIDATED_ARTICLES, MAX_SEARCH_CYCLES, MAX_ARTICLES_COUNT
-from agents.classes import SearchRequest, GraphState
+from backend.agents.constants import MIN_VALIDATED_ARTICLES, MAX_SEARCH_CYCLES, MAX_ARTICLES_COUNT
+from backend.agents.classes import SearchRequest, GraphState
 
 
 def download_arxiv_html_article(article_id: str) -> Optional[str]:
@@ -64,9 +63,9 @@ class SearchQueryPlanner(BaseModel):
 def plan_search_queries_node(state: GraphState) -> GraphState:
     cycle_count = state['search_cycles'] + 1
     print(f"\n--- 🧠 АГЕНТ-ПЛАНИРОВЩИК (ЦИКЛ {cycle_count}/{MAX_SEARCH_CYCLES}) ---")
-
     parser = JsonOutputParser(pydantic_object=SearchQueryPlanner)
 
+    state['papers'] = []
     previous_queries = []
     for search_req in state['search_history']:
         previous_queries.extend(search_req.search_queries)
@@ -80,26 +79,32 @@ def plan_search_queries_node(state: GraphState) -> GraphState:
         prompt = ChatPromptTemplate.from_template(SEARCH_QUERY_PLANNER_CREATIVE_PROMPT)
         planner_chain = prompt | llm_creative | parser
 
+
+    time.sleep(5)
+
     try:
         plan = planner_chain.invoke({
             "query": state['current_search_request'].input_query,
             "previous_queries_str": "\n- ".join(previous_queries),
             "format_instructions": parser.get_format_instructions()
         })
-        new_queries = plan['queries']
-        print(f"  [+] Сгенерирован новый план поиска:")
-        for q in new_queries: print(f"    - {q}")
-
-        state['current_search_request'].search_queries = new_queries
-        state['search_cycles'] = cycle_count
-
-        return state
     except Exception as e:
-        print(f"  [!] Ошибка при планировании, использую простой запрос: {e}")
-        simple_query = f"{state['current_search_request'].input_query.lower().replace('расскажи мне про', '').strip()} part {cycle_count}"
-        state['current_search_request'].search_queries = [simple_query]
-        state['search_cycles'] = cycle_count
-        return state
+        time.sleep(20)
+        plan = planner_chain.invoke({
+            "query": state['current_search_request'].input_query,
+            "previous_queries_str": "\n- ".join(previous_queries),
+            "format_instructions": parser.get_format_instructions()
+        })
+    new_queries = plan['queries']
+    print(f"  [+] Сгенерирован новый план поиска:")
+    for q in new_queries: print(f"    - {q}")
+
+    state['current_search_request'].search_queries = new_queries
+    state['search_cycles'] = cycle_count
+
+    return state
+
+
 
 
 # ========================= УЗЛЫ ПОИСКА =========================
@@ -201,12 +206,20 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
         print(f"\n  [{i + 1}/{len(new_papers)}] Обрабатываю: '{title[:70]}...'")
         pdf_url, source_display_name = None, "N/A"
         best_location = paper.get('best_oa_location')
+
+        ### --- ИСПРАВЛЕНИЕ --- ###
+        # Добавляем более надежную проверку, чтобы избежать падения, если 'source' равен None
         if best_location:
-            source_display_name = best_location.get('source', {}).get('display_name', 'N/A')
+            source_dict = best_location.get('source')
+            if source_dict:
+                source_display_name = source_dict.get('display_name', 'N/A')
+
             pdf_url = best_location.get('pdf_url')
             if not pdf_url:
                 landing_page_url = best_location.get('landing_page_url', '')
                 if 'arxiv.org/abs' in landing_page_url: pdf_url = landing_page_url.replace('/abs/', '/pdf/')
+        ### --- КОНЕЦ ИСПРАВЛЕНИЯ --- ###
+
         if not pdf_url:
             for loc in paper.get('locations', []):
                 if loc and loc.get('pdf_url'):
@@ -240,15 +253,17 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
             print("    [i] Не удалось скачать полный текст, использую аннотацию.")
             text_content = paper.get('abstract')
         if text_content:
+            print("    [*] Создаю резюме...")
+            time.sleep(5)
             try:
-                print("    [*] Создаю резюме...")
                 summary_text = summarizer_chain.invoke({"paper_text": text_content})
-                new_summaries.append({"title": title, "authors": authors, "source": pdf_url or paper.get('id'),
-                                      "summary": summary_text})
-                print("    [+] Резюме успешно создано.")
-                time.sleep(2)
             except Exception as e:
-                print(f"    [!] Ошибка при создании резюме: {e}")
+                time.sleep(20)
+                summary_text = summarizer_chain.invoke({"paper_text": text_content})
+            new_summaries.append({"title": title, "authors": authors, "source": pdf_url or paper.get('id'),
+                                  "summary": summary_text})
+            print("    [+] Резюме успешно создано.")
+
         else:
             print(f"    [!] Не удалось получить текст статьи. Пропускаю.")
 
@@ -258,7 +273,7 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
 
 # ========================= УЗЕЛ ВАЛИДАЦИИ РЕЗЮМЕ =========================
 def validate_summaries_node(state: GraphState) -> GraphState:
-    print("\n--- ✅ АГЕНТ-ВАЛИДАТОР: ПРОВЕРЯЮ РЕЛЕВАНТНОСТЬ НОВЫХ РЕЗЮМЕ ---")  # <<< ИСПРАВЛЕНО: Уточнил лог
+    print("\n--- ✅ АГЕНТ-ВАЛИДАТОР: ПРОВЕРЯЮ РЕЛЕВАНТНОСТЬ НОВЫХ РЕЗЮМЕ ---")
     original_query = state['current_search_request'].input_query if state['current_search_request'] else ""
 
     all_summaries = state['summaries']
@@ -278,14 +293,16 @@ def validate_summaries_node(state: GraphState) -> GraphState:
         f"  [*] Валидирую {len(summaries_to_validate)} новых резюме...")
 
     for summary_data in summaries_to_validate:
+        time.sleep(5)
         try:
             result = validation_chain.invoke(
                 {"original_query": original_query, "summary_text": summary_data['summary']}).strip().lower()
-            if "yes" in result:
-                newly_validated_summaries.append(summary_data)
         except Exception as e:
-            print(f"  [!] Ошибка валидации для '{summary_data['title'][:50]}...': {e}")
-        time.sleep(2)
+            time.sleep(20)
+            result = validation_chain.invoke(
+                {"original_query": original_query, "summary_text": summary_data['summary']}).strip().lower()
+        if "yes" in result:
+            newly_validated_summaries.append(summary_data)
 
     state['validated_summaries'] = previously_validated + newly_validated_summaries
 
@@ -375,47 +392,52 @@ def compile_workflow():
     return app
 
 
-def node_make_research(state: GraphState) -> Command:
+def node_make_research(state: GraphState) -> Dict:
+    """
+    Основной узел-обертка для поискового модуля.
+    Запускает под-граф поиска и обновляет основное состояние.
+    """
+    # Запускаем под-граф поиска
     final_report, request = make_research(state['current_search_request'].input_query, state)
-    return Command(
-        update={
-            'current_search_request': None,
-            'papers': [],
-            'summaries': [],
-            'validated_summaries': [],
-            'final_report': final_report,
-        },
-        goto="orchestrator"
-    )
+
+    # Возвращаем словарь для обновления состояния основного графа
+    return {
+        'current_search_request': None,  # Сбрасываем текущий запрос
+        'papers': [],
+        'summaries': [],
+        'validated_summaries': [],
+        'final_report': final_report,  # Это поле сейчас не используется дальше, но оставим для консистентности
+        # 'search_history' уже обновлен внутри make_research, поэтому его не трогаем
+    }
+
 
 def make_research(query, state: GraphState) -> tuple[str, SearchRequest]:
-    state['current_search_request'] = SearchRequest(input_query=query)
+    # Устанавливаем начальное состояние для под-графа
+    initial_search_state = state.copy()
+    initial_search_state['current_search_request'] = SearchRequest(input_query=query)
     app = compile_workflow()
-
-    # print(f"🚀 Запускаю циклического агента с запросом: '{state['search_system_input']}'\n")
+    state['papers'] = []
+    state['summaries'] = []
+    state['validated_summaries'] = []
 
     final_state_data = None
-
     recursion_limit = (MAX_SEARCH_CYCLES * 5) + 5
 
-    for event in app.stream(state, config={"recursion_limit": recursion_limit}):
+    for event in app.stream(initial_search_state, config={"recursion_limit": recursion_limit}):
         for node_name, state_update in event.items():
-            print(f"--- УЗЕЛ '{node_name}' ЗАВЕРШЕН ---")
+            # Обновляем состояние основного графа результатами из под-графа
+            for key, value in state_update.items():
+                if key in state:
+                    state[key] = value
             final_state_data = state_update
 
-    print("\n\n" + "=" * 80 + "\n✅ РАБОТА АГЕНТА ЗАВЕРШЕНА ✅\n" + "=" * 80 + "\n")
+    print("\n\n" + "=" * 80 + "\n✅ РАБОТА ПОИСКОВОГО АГЕНТА ЗАВЕРШЕНА ✅\n" + "=" * 80 + "\n")
 
     if final_state_data:
-        final_report = final_state_data.get('final_report')
-        error_message = final_state_data.get('error')
-
-        if final_report:
-            print("--- 📝 ИТОГОВЫЙ ОТЧЕТ ПО РЕЛЕВАНТНЫМ СТАТЬЯМ ---\n")
-            return final_report, state['current_search_request']
-        if error_message:
-            print(f"\n\n--- ⚠️ ОШИБКА ---\n{error_message}")
-            return f"Произошла ошибка: {error_message}"
-        else:
-            return "Не удалось сформировать отчет. Возможно, не нашлось релевантных статей."
+        final_report = final_state_data.get('final_report', "Отчет не был сгенерирован.")
+        # `search_history` в `state` уже должен быть обновлен
+        last_search_request = next((s for s in reversed(state.get('search_history', [])) if s.input_query == query),
+                                   None)
+        return final_report, last_search_request
     else:
-        return "Не удалось получить итоговое состояние графа."
+        return "Не удалось получить итоговое состояние графа.", SearchRequest(input_query=query)
