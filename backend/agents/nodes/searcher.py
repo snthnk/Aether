@@ -145,7 +145,12 @@ def search_arxiv_node(state: GraphState) -> GraphState:
     print("\n--- 📚 ИЩУ СТАТЬИ В ARXIV ---")
     search_queries = state['current_search_request'].search_queries if state['current_search_request'] else []
     all_results = state['papers']
-    seen_titles = {p.get("title", "").lower().strip() for p in all_results}
+    seen_titles = set()
+    if all_results:
+        for p in all_results:
+            if p is None or p.get("title", "") is None:
+                continue
+            seen_titles.add(p.get("title", "").lower().strip())
 
     for query in search_queries:
         print(f"  [*] Запрос в arXiv: '{query}'")
@@ -207,8 +212,6 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
         pdf_url, source_display_name = None, "N/A"
         best_location = paper.get('best_oa_location')
 
-        ### --- ИСПРАВЛЕНИЕ --- ###
-        # Добавляем более надежную проверку, чтобы избежать падения, если 'source' равен None
         if best_location:
             source_dict = best_location.get('source')
             if source_dict:
@@ -218,7 +221,6 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
             if not pdf_url:
                 landing_page_url = best_location.get('landing_page_url', '')
                 if 'arxiv.org/abs' in landing_page_url: pdf_url = landing_page_url.replace('/abs/', '/pdf/')
-        ### --- КОНЕЦ ИСПРАВЛЕНИЯ --- ###
 
         if not pdf_url:
             for loc in paper.get('locations', []):

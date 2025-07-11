@@ -5,6 +5,7 @@ from agents.nodes.formulator import formulator_node
 from agents.nodes.critics import _critique_logic as critics_node
 from agents.nodes.searcher import node_make_research as searcher_node
 from typing import List
+from backend.llm.llms import llm
 
 
 # --- Узлы и логика маршрутизации ---
@@ -21,8 +22,11 @@ def end_node(state: GraphState) -> dict:
     if final_hypotheses:
         print("\n✅ Итоговые перспективные гипотезы:")
         for i, hyp in enumerate(final_hypotheses):
+            answer = hyp.formulation
+            translated_answer = llm.invoke(f"Translate the following text into Russian while keeping the key terms and names in English. Don't write anything else, just the translation."
+                                           f"Here is the text: {answer}")
             print(f"\n--- Гипотеза #{i + 1} ---")
-            print(f"Формулировка: {hyp.formulation}")
+            print(f"Формулировка: {translated_answer}")
             print("\nКритика:")
             print(hyp.critique)
     else:
@@ -105,8 +109,13 @@ app = workflow.compile()
 # --- Запуск ---
 
 async def main():
+    query = input("Введите ваш вопрос: ")
+
+    query = llm.invoke(f"You have been given a user request. Translate it into English. If it is already in English, simply duplicate the request. Don't write anything else, just the translation."
+               f"\n\nUser request: {query}")
+
     inputs = {
-        "user_question": "Increasing the speed of LLM token creation",
+        "user_question": query,
         "search_history": [],
         "hypotheses_and_critics": [],
         "search_system_input": None,
@@ -125,7 +134,7 @@ async def main():
         if agent in ["_write", "RunnableSequence", "__start__", "__end__", "LangGraph"]:
             continue
         if event_type == 'on_chat_model_stream':
-            print(event['data']['chunk'].content, end='')
+            print(event['data']['chunk'].content)
         elif event_type == 'on_chain_start':
             print(f"\n<{agent}>")
         elif event_type == 'on_chain_end':
