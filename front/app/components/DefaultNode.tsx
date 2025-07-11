@@ -3,15 +3,14 @@ import {Handle, Position} from "@xyflow/react";
 import {NodeStatusIndicator} from "@/components/node-status-indicator";
 import {CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Badge} from "@/components/ui/badge";
-import useFlowStore from "@/app/store";
-import nodes from "@/app/chartElements/nodes";
+import {useContext} from "react";
+import {FlowContext} from "@/app/FlowChart";
 
-export default function DefaultNode({data}: { data: { title: string, description: string } }) {
-    const {currentStep} = useFlowStore()
-    console.log(nodes.findIndex(({title}) => title === data.title));
-    const isSuccess = currentStep-1 >= nodes.findIndex(({title}) => title === data.title)
+export default function DefaultNode({id, data}: { id: string, data: { title: string, description: string } }) {
+    const {nodes} = useContext(FlowContext)
+    const isRunning = nodes[nodes.length - 1].id === id;
     return (
-        <NodeStatusIndicator status={isSuccess ? "success" : "loading"}>
+        <NodeStatusIndicator status={!isRunning ? "success" : "loading"}>
             <BaseNode>
                 <Handle type="target" position={Position.Top}/>
                 <Handle type="source" position={Position.Bottom}/>
@@ -19,7 +18,7 @@ export default function DefaultNode({data}: { data: { title: string, description
                     <CardTitle className="flex justify-between">
                         <p>{data.title}</p>
                         <Badge
-                            variant={isSuccess ? "default" : "secondary"}>{isSuccess ? "Успешно!" : "Загрузка..."}</Badge>
+                            variant={!isRunning ? "default" : "secondary"}>{!isRunning ? "Успешно!" : "Загрузка..."}</Badge>
                     </CardTitle>
                     <CardDescription>
                         {data.description}

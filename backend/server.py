@@ -5,9 +5,17 @@ from typing import AsyncGenerator
 import uvicorn
 from fastapi import FastAPI, Request
 from sse_starlette import EventSourceResponse
-from main import app as langapp
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 initial = {
     "last_reasoning": "",
@@ -29,11 +37,11 @@ nodes = ["orchestrator", "formulator", "searcher", "critics", "formulator", "sea
 async def mock_astream_events(input_data, version="v2") -> AsyncGenerator[dict, None]:
     # Simulate each node emitting a start and end event
     for node in nodes:
-        await asyncio.sleep(1)  # simulate async delay
+        await asyncio.sleep(0.2)  # simulate async delay
         yield {"event": "on_chain_start", "name": node}
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.2)
         yield {"event": "on_chat_model_stream", "data": "some llm output"}
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.2)
         yield {"event": "on_chain_end", "name": node}
 
 async def stream(prompt):
@@ -52,14 +60,13 @@ async def stream(prompt):
         if event_type == 'on_chain_start':
             print(f"<{agent}>")
             yield json.dumps({"type": "agent_start", "agent": agent})
-        elif event_type == 'on_chain_end':
-            print(f"</{agent}>")
-            yield json.dumps({"type": "agent_end", "agent": agent})
+        # elif event_type == 'on_chain_end':
+        #     print(f"</{agent}>")
+        #     yield json.dumps({"type": "agent_end", "agent": agent})
 
-@app.post("/generate")
+@app.get("/generate")
 async def generate(req: Request):
-    body = await req.json()
-    prompt = body["prompt"]
+    prompt = req.query_params["prompt"]
     return EventSourceResponse(stream(prompt))
 
 if __name__ == "__main__":

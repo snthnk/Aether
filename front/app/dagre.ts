@@ -8,6 +8,7 @@ const nodeHeight = 125;
 
 export const getLayoutedElements = (nodes: {
     id: string
+    type: string
     title: string
     description: string
 }[], edges: Edge[]) => {
@@ -27,7 +28,7 @@ export const getLayoutedElements = (nodes: {
         const nodeWithPosition = dagreGraph.node(node.id);
         return {
             id: node.id,
-            type: node.id,
+            type: node.type,
             targetPosition: Position.Top,
             sourcePosition: Position.Bottom,
             data: {

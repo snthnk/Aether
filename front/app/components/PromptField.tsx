@@ -1,41 +1,27 @@
-import {useRef, useState} from "react";
-import {Handle, Position, useReactFlow} from "@xyflow/react";
+import {useContext, useState} from "react";
+import {Handle, Position} from "@xyflow/react";
 import {Textarea} from "@/components/ui/textarea";
 import {Button} from "@/components/ui/button";
 import {Send} from "lucide-react";
 import {BaseNode} from "@/components/base-node";
-import useFlowStore from "@/app/store";
-import nodes from "@/app/chartElements/nodes";
+import {FlowContext} from "@/app/FlowChart";
 
 export const PromptField = () => {
-    const {fitView} = useReactFlow()
-    const {currentStep, setCurrentStep, increaseStep} = useFlowStore()
-    const [disabled, setDisabled] = useState(false);
-    const ref = useRef<number>(0);
+    const [prompt, setPrompt] = useState("");
+    const [activated, setActivated] = useState(false);
+    const {connect, isConnected} = useContext(FlowContext);
     return (
         <BaseNode className="flex flex-col gap-2 p-4">
-            {currentStep >= 1 && <Handle type="source" position={Position.Bottom} id="prompt"/>}
-            <Textarea className="h-32 max-h-40" disabled={disabled}
+            {activated && <Handle type="source" position={Position.Bottom} id="prompt"/>}
+            <Textarea className="h-32 max-h-40" disabled={isConnected}
+                      value={prompt} onChange={(e) => setPrompt(e.target.value)}
                       placeholder="Введите промпт для генерации гипотез..."/>
-            <Button onClick={async () => {
-                setCurrentStep(0);
-                setDisabled(true);
-                ref.current = 0;
-
-                const int = setInterval(async () => {
-                    increaseStep();
-                    ref.current += 1;
-                    if (ref.current >= nodes.length) return;
-                    await fitView({duration: 500, padding: 0.4, nodes: [nodes[ref.current], nodes[ref.current - 1]]})
-                }, 1000)
-
-                setTimeout(async () => {
-                    clearInterval(int);
-                    setDisabled(false);
-                    await fitView({duration: 500})
-                }, 11000)
-
-            }} disabled={disabled}><Send/> Отправить</Button>
+            <Button
+                onClick={() => {
+                    setActivated(true);
+                    connect(`http://localhost:8000/generate?${new URLSearchParams({prompt}).toString()}`)
+                }}
+                disabled={isConnected}><Send/> Отправить</Button>
         </BaseNode>
     )
 }
