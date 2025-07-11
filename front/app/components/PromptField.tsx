@@ -29,9 +29,10 @@ export const PromptField = () => {
                     await fitView({duration: 500, padding: 0.4, nodes: [nodes[ref.current], nodes[ref.current - 1]]})
                 }, 1000)
 
-                setTimeout(() => {
+                setTimeout(async () => {
                     clearInterval(int);
                     setDisabled(false);
+                    await fitView({duration: 500})
                 }, 11000)
 
             }} disabled={disabled}><Send/> Отправить</Button>
