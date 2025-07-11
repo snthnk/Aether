@@ -1,0 +1,7 @@
+langgraph
+langchain
+python-dotenv
+langchain-google-genai
+google-generativeai
+beautifulsoup4
+pymupdf
