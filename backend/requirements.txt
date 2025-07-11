@@ -5,3 +5,6 @@ langchain-google-genai
 google-generativeai
 beautifulsoup4
 pymupdf
+uvicorn
+fastapi
+sse_starlette
