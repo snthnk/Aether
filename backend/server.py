@@ -32,7 +32,7 @@ initial = {
     "search_cycles": 0
 }
 
-nodes = ["orchestrator", "formulator", "searcher", "critics", "formulator", "searcher", "critics", "end"]
+nodes = ["formulator", "critics", "searcher", "formulator", "critics", "end"]
 
 async def mock_astream_events(input_data, version="v2") -> AsyncGenerator[dict, None]:
     # Simulate each node emitting a start and end event

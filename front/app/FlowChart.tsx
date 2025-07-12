@@ -4,17 +4,17 @@
 import {Background, Controls, Edge, MarkerType, Node, ReactFlow, useEdgesState, useNodesState} from '@xyflow/react';
 
 import '@xyflow/react/dist/style.css';
-import {getLayoutedElements} from "@/app/dagre";
-import {createContext, useEffect} from "react";
+import {createContext} from "react";
 import {PromptField} from "@/app/components/PromptField";
 import initialNodes from "@/app/chartElements/nodes";
 import DefaultNode from "@/app/components/DefaultNode";
 import useSSE from "@/app/useSSE";
-import initialEdges from "@/app/chartElements/edges";
+import StreamData from "@/app/StreamData";
 
 export const FlowContext = createContext<{
     nodes: Node[],
     edges: Edge[],
+    data: Record<string, string> | null,
     setNodes: (nodes: Node[]) => void,
     setEdges: (edges: Edge[]) => void,
     isConnected: boolean,
@@ -22,6 +22,7 @@ export const FlowContext = createContext<{
 }>({
     nodes: [],
     edges: [],
+    data: null,
     setNodes: () => {
     },
     setEdges: () => {
@@ -37,68 +38,21 @@ export default function FlowChart() {
 
     const {connect, data, isConnected} = useSSE();
 
-    useEffect(() => {
-        console.log(data);
-        if (!data) {
-            setNodes(getLayoutedElements([{...initialNodes[0], type: 'prompt'}], []).nodes);
-            return;
-        }
-
-        const nodeToInsert = initialNodes.find(inode => inode.id === data.agent);
-        const edgeToInsert = initialEdges.find(iedge => iedge.target === data.agent);
-
-        if (!nodeToInsert || !edgeToInsert) return;
-
-        const timestamp = Date.now();
-        const newNode = {
-            ...nodeToInsert,
-            id: `${nodeToInsert.id}_${timestamp}`,
-            type: data.agent,
-        };
-
-        // Find the most recent node of the source type to connect from
-        const sourceType = edgeToInsert.source;
-        const sourceNode = [...nodes].reverse().find(n => n.type === sourceType) || nodes[0];
-
-        const newEdge = {
-            ...edgeToInsert,
-            id: `${edgeToInsert.id}_${timestamp}`,
-            source: sourceNode.id,
-            target: newNode.id
-        };
-
-        const currentNodes = nodes.map(e => ({
-            id: e.id,
-            type: e.type!,
-            title: e.data.title as string,
-            description: e.data.description as string,
-        }));
-
-        const {nodes: insertNodes, edges: insertEdges} = getLayoutedElements(
-            [...currentNodes, newNode],
-            [...edges, newEdge]
-        );
-
-        console.log(insertNodes, insertEdges);
-
-        setNodes(insertNodes);
-        setEdges(insertEdges);
-    }, [data, setEdges, setNodes]);
-
     return (
         <FlowContext.Provider value={{
-            nodes, edges, setNodes, setEdges, isConnected, connect
+            nodes, edges, data, setNodes, setEdges, isConnected, connect
         }}>
-            <ReactFlow 
-                proOptions={{hideAttribution: true}} 
+            <ReactFlow
+                proOptions={{hideAttribution: true}}
                 nodes={nodes.map(e => ({
                     style: {width: 250},
                     ...e,
-                }))} 
+                }))}
                 edges={edges.map(e => ({
                     type: "smoothstep",
                     markerEnd: {type: MarkerType.Arrow},
                     ...e,
+                    animated: isConnected && e.animated
                 }))}
                 nodeTypes={{
                     ...Object.fromEntries(initialNodes.map(e => [e.id, DefaultNode])),
@@ -107,6 +61,7 @@ export default function FlowChart() {
                 fitView>
                 <Background/>
                 <Controls/>
+                <StreamData/>
             </ReactFlow>
         </FlowContext.Provider>
     );
