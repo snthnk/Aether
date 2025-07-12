@@ -1,4 +1,5 @@
-import {useContext, useEffect} from "react";
+/* eslint-disable react-hooks/exhaustive-deps */
+import {useContext, useEffect, useState} from "react";
 import {FlowContext} from "@/app/FlowChart";
 import {getLayoutedElements} from "@/app/dagre";
 import initialNodes from "@/app/chartElements/nodes";
@@ -6,7 +7,7 @@ import initialEdges from "@/app/chartElements/edges";
 import {useReactFlow} from "@xyflow/react";
 
 export default function StreamData() {
-    const {data, setNodes, setEdges, nodes, edges} = useContext(FlowContext)
+    const {data, setNodes, setEdges, nodes, edges, isConnected} = useContext(FlowContext)
     const {fitView} = useReactFlow()
     useEffect(() => {
         if (!data) {
@@ -79,7 +80,15 @@ export default function StreamData() {
         setEdges(insertEdges);
 
         fitView({duration: 500, nodes: insertNodes.slice(insertNodes.length-1, insertNodes.length)});
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [data, setEdges, setNodes]);
+    const [first, setFirst] = useState(false);
+    useEffect(() => {
+        if (!first) {
+            setFirst(true)
+            return;
+        }
+        fitView({duration: 500, nodes})
+    }, [fitView, isConnected]);
+
     return null
 }
