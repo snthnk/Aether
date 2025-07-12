@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
 from backend.agents.constants import MIN_VALIDATED_ARTICLES, MAX_SEARCH_CYCLES, MAX_ARTICLES_COUNT
 from backend.agents.classes import SearchRequest, GraphState
+from backend.token_count import token_count
 
 
 def download_arxiv_html_article(article_id: str) -> Optional[str]:
@@ -61,6 +62,7 @@ class SearchQueryPlanner(BaseModel):
 
 
 def plan_search_queries_node(state: GraphState) -> GraphState:
+    global token_count
     cycle_count = state['search_cycles'] + 1
     print(f"\n--- 🧠 АГЕНТ-ПЛАНИРОВЩИК (ЦИКЛ {cycle_count}/{MAX_SEARCH_CYCLES}) ---")
     parser = JsonOutputParser(pydantic_object=SearchQueryPlanner)
@@ -72,29 +74,33 @@ def plan_search_queries_node(state: GraphState) -> GraphState:
 
     if not previous_queries:
         prompt = ChatPromptTemplate.from_template(SEARCH_QUERY_PLANNER_PROMPT)
-        planner_chain = prompt | llm | parser
+        llm_chain = prompt | llm
     else:
         print(f"  [i] Предыдущие запросы не дали достаточно результатов: {previous_queries}")
         print("  [*] Генерирую новые, альтернативные запросы...")
         prompt = ChatPromptTemplate.from_template(SEARCH_QUERY_PLANNER_CREATIVE_PROMPT)
-        planner_chain = prompt | llm_creative | parser
+        llm_chain = prompt | llm_creative
 
 
-    time.sleep(5)
+    chain_input = {
+        "query": state['current_search_request'].input_query,
+        "previous_queries_str": "\n- ".join(previous_queries),
+        "format_instructions": parser.get_format_instructions()
+    }
 
     try:
-        plan = planner_chain.invoke({
-            "query": state['current_search_request'].input_query,
-            "previous_queries_str": "\n- ".join(previous_queries),
-            "format_instructions": parser.get_format_instructions()
-        })
+        llm_response = llm_chain.invoke(chain_input)
+        if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
+            token_count += llm_response.usage_metadata.get('total_tokens', 0)
+        plan = parser.parse(llm_response.content)
     except Exception as e:
+        print(f"  [!] Ошибка при генерации нового плана поиска: {e}")
         time.sleep(20)
-        plan = planner_chain.invoke({
-            "query": state['current_search_request'].input_query,
-            "previous_queries_str": "\n- ".join(previous_queries),
-            "format_instructions": parser.get_format_instructions()
-        })
+        llm_response = llm_chain.invoke(chain_input)
+        if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
+            token_count += llm_response.usage_metadata.get('total_tokens', 0)
+        plan = parser.parse(llm_response.content)
+
     new_queries = plan['queries']
     print(f"  [+] Сгенерирован новый план поиска:")
     for q in new_queries: print(f"    - {q}")
@@ -186,7 +192,9 @@ def search_arxiv_node(state: GraphState) -> GraphState:
 
 
 # ========================= УЗЕЛ СКАЧИВАНИЯ И СУММАРИЗАЦИИ =========================
+# ========================= УЗЕЛ СКАЧИВАНИЯ И СУММАРИЗАЦИИ =========================
 def fetch_and_summarize_node(state: GraphState) -> GraphState:
+    global token_count
     print("\n--- 📥✍️ АГЕНТ-СУММАРИЗАТОР: СКАЧИВАЮ И ДЕЛАЮ РЕЗЮМЕ ---")
     papers = state['papers']
     existing_summaries = state['summaries']
@@ -198,7 +206,8 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
         return state
 
     print(f"  [*] Найдено {len(new_papers)} новых статей для суммризации.")
-    summarizer_chain = ChatPromptTemplate.from_template(SEARCH_SUMMARIZER_PROMPT) | llm | StrOutputParser()
+    # ИСПРАВЛЕНИЕ: Убираем StrOutputParser() из цепочки, чтобы получить полный объект ответа от LLM
+    summarizer_chain = ChatPromptTemplate.from_template(SEARCH_SUMMARIZER_PROMPT) | llm
     new_summaries = []
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
@@ -256,16 +265,25 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
             text_content = paper.get('abstract')
         if text_content:
             print("    [*] Создаю резюме...")
-            time.sleep(5)
             try:
-                summary_text = summarizer_chain.invoke({"paper_text": text_content})
+                # Теперь llm_response будет объектом AIMessage
+                llm_response = summarizer_chain.invoke({"paper_text": text_content})
+                if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
+                    token_count += llm_response.usage_metadata.get('total_tokens', 0)
+                # ИСПРАВЛЕНИЕ: Извлекаем текст из .content
+                summary_text = llm_response.content
             except Exception as e:
+                print(f"    [!] Ошибка при создании резюме: {e}")
                 time.sleep(20)
-                summary_text = summarizer_chain.invoke({"paper_text": text_content})
+                # Повторяем ту же логику
+                llm_response = summarizer_chain.invoke({"paper_text": text_content})
+                if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
+                    token_count += llm_response.usage_metadata.get('total_tokens', 0)
+                summary_text = llm_response.content
+
             new_summaries.append({"title": title, "authors": authors, "source": pdf_url or paper.get('id'),
                                   "summary": summary_text})
             print("    [+] Резюме успешно создано.")
-
         else:
             print(f"    [!] Не удалось получить текст статьи. Пропускаю.")
 
@@ -275,6 +293,7 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
 
 # ========================= УЗЕЛ ВАЛИДАЦИИ РЕЗЮМЕ =========================
 def validate_summaries_node(state: GraphState) -> GraphState:
+    global token_count
     print("\n--- ✅ АГЕНТ-ВАЛИДАТОР: ПРОВЕРЯЮ РЕЛЕВАНТНОСТЬ НОВЫХ РЕЗЮМЕ ---")
     original_query = state['current_search_request'].input_query if state['current_search_request'] else ""
 
@@ -289,20 +308,27 @@ def validate_summaries_node(state: GraphState) -> GraphState:
         return state
 
     prompt = ChatPromptTemplate.from_template(VALIDATION_PROMPT)
-    validation_chain = prompt | llm | StrOutputParser()
+    validation_chain = prompt | llm
     newly_validated_summaries = []
     print(
         f"  [*] Валидирую {len(summaries_to_validate)} новых резюме...")
 
     for summary_data in summaries_to_validate:
-        time.sleep(5)
+        chain_input = {"original_query": original_query, "summary_text": summary_data['summary']}
         try:
-            result = validation_chain.invoke(
-                {"original_query": original_query, "summary_text": summary_data['summary']}).strip().lower()
+            llm_response = validation_chain.invoke(chain_input)
+            if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
+                token_count += llm_response.usage_metadata.get('total_tokens', 0)
+            result = llm_response.content.strip().lower()
+
         except Exception as e:
+            print(f"  [!] Ошибка при валидации резюме: {e}")
             time.sleep(20)
-            result = validation_chain.invoke(
-                {"original_query": original_query, "summary_text": summary_data['summary']}).strip().lower()
+            llm_response = validation_chain.invoke(chain_input)
+            if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
+                token_count += llm_response.usage_metadata.get('total_tokens', 0)
+            result = llm_response.content.strip().lower()
+
         if "yes" in result:
             newly_validated_summaries.append(summary_data)
 

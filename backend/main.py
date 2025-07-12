@@ -6,7 +6,9 @@ from agents.nodes.critics import _critique_logic as critics_node
 from agents.nodes.searcher import node_make_research as searcher_node
 from typing import List
 from backend.llm.llms import llm
-
+import time
+from backend.agents.constants import MAX_REFINEMENT_CYCLES
+import token_count
 
 # --- Узлы и логика маршрутизации ---
 
@@ -23,17 +25,22 @@ def end_node(state: GraphState) -> dict:
         print("\n✅ Итоговые перспективные гипотезы:")
         for i, hyp in enumerate(final_hypotheses):
             answer = hyp.formulation
-            translated_answer = llm.invoke(f"Translate the following text into Russian while keeping the key terms and names in English. Don't write anything else, just the translation."
-                                           f"Here is the text: {answer}")
+            translated_answer = llm.invoke(
+                f"Translate the following text into Russian while keeping the key terms and names in English. Don't write anything else, just the translation.\nHere is the text: {answer}"
+            )
+
+            if hasattr(translated_answer, "usage_metadata") and translated_answer.usage_metadata:
+                token_count.token_count += translated_answer.usage_metadata.get('input_tokens', 0) + translated_answer.usage_metadata.get('output_tokens', 0)
+                print(token_count.token_count)
+
             print(f"\n--- Гипотеза #{i + 1} ---")
-            print(f"Формулировка: {translated_answer}")
+            print(f"Формулировка: {str(translated_answer)}")
             print("\nКритика:")
             print(hyp.critique)
     else:
         print("\n❌ Не удалось выработать перспективную гипотезу после всех итераций.")
 
     return {}
-
 
 def route_from_formulator(state: GraphState) -> str:
     """Принимает решение после формулировщика: искать информацию или критиковать."""
@@ -53,12 +60,23 @@ def route_from_critics(state: GraphState) -> str:
         print("-> Ошибка: нет гипотез для анализа. Завершение работы.")
         return "end"
 
+    # Считаем, сколько уже было полных циклов критики
+    num_critique_cycles = len(state['hypotheses_and_critics'])
+
     latest_hypotheses = state['hypotheses_and_critics'][-1]
-    # Проверяем, была ли хоть одна гипотеза одобрена критиками
     is_any_approved = any(h.is_approved for h in latest_hypotheses)
+
+    print(f"  [i] Цикл доработки: {num_critique_cycles}/{MAX_REFINEMENT_CYCLES}")
+    print(f"  [i] Одобренные гипотезы в этом раунде: {'Да' if is_any_approved else 'Нет'}")
 
     if is_any_approved:
         print(f"-> Найдена одобренная гипотеза. Завершение работы.")
+        return "end"
+
+    if num_critique_cycles >= MAX_REFINEMENT_CYCLES:
+        print(f"-> Достигнут лимит циклов доработки ({MAX_REFINEMENT_CYCLES}). Завершение работы с тем, что есть.")
+        # Даже если ничего не одобрено, мы завершаем работу, чтобы не зацикливаться.
+        # В узле end можно добавить логику, чтобы показать лучшие из последних, даже если они не "approved".
         return "end"
     else:
         print("-> Нет одобренных гипотез. Возврат к формулировщику для доработки.")
@@ -109,10 +127,17 @@ app = workflow.compile()
 # --- Запуск ---
 
 async def main():
+    global token_count
     query = input("Введите ваш вопрос: ")
 
-    query = llm.invoke(f"You have been given a user request. Translate it into English. If it is already in English, simply duplicate the request. Don't write anything else, just the translation."
-               f"\n\nUser request: {query}")
+    translation = llm.invoke(
+        f"You have been given a user request. Translate it into English. If it is already in English, simply duplicate the request. Don't write anything else, just the translation.\n\nUser request: {query}"
+    )
+
+    if hasattr(translation, "usage_metadata") and translation.usage_metadata:
+        token_count.token_count += translation.usage_metadata.get('input_tokens', 0) + translation.usage_metadata.get('output_tokens', 0)
+
+    query = str(translation)  # если это object, вытягиваем текст
 
     inputs = {
         "user_question": query,
@@ -142,4 +167,8 @@ async def main():
 
 
 if __name__ == "__main__":
+    start = time.time()
     asyncio.run(main())
+    end = time.time()
+    print(f"Total time: {end - start}")
+    print(f"Token count: {token_count}")

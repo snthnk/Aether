@@ -9,6 +9,7 @@ from backend.agents.prompts import (
     SYNTHESIZER_PROMPT_TEMPLATE, SEARCH_QUERY_GENERATOR_PROMPT)
 from backend.agents.classes import GraphState
 from backend.agents.nodes.searcher import make_research
+from backend.token_count import token_count
 
 SearchToolFunc = Callable[[str], Awaitable[List[Dict[str, Any]]]]
 
@@ -68,25 +69,39 @@ class CritiquePanel:
         self.search_tool = search_tool
 
     async def _run_critic(self, critic_name: str, prompt_template: str, **kwargs) -> str:
+        global token_count
         prompt = ChatPromptTemplate.from_template(prompt_template)
         chain = prompt | self.llm
         try:
-            await asyncio.sleep(5)
             response = await chain.ainvoke(kwargs)
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                token_count += response.usage_metadata.get('total_tokens', 0)
         except Exception as e:
+            print(f"Возникла ошибка во время работы критика {e}")
             await asyncio.sleep(20)
             response = await chain.ainvoke(kwargs)
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                token_count += response.usage_metadata.get('total_tokens', 0)
+
         return response.content
 
     async def _run_innovator(self, hypothesis: str, source_materials_text: str) -> str:
+        global token_count
         print("-> [Новатор] Запущен.")
         query_gen_prompt = self._SEARCH_QUERY_GENERATOR_PROMPT.format(hypothesis_text=hypothesis)
-        await asyncio.sleep(5)
         try:
-            generated_query = (await self.llm.ainvoke(query_gen_prompt)).content.strip()
+            llm_response = await self.llm.ainvoke(query_gen_prompt)
+            if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
+                token_count += llm_response.usage_metadata.get('total_tokens', 0)
+            generated_query = llm_response.content.strip()
+
         except Exception as e:
+            print(f"Возникла ошибка во время работы критика {e}")
             await asyncio.sleep(20)
-            generated_query = (await self.llm.ainvoke(query_gen_prompt)).content.strip()
+            llm_response = await self.llm.ainvoke(query_gen_prompt)
+            if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
+                token_count += llm_response.usage_metadata.get('total_tokens', 0)
+            generated_query = llm_response.content.strip()
 
         search_results_list = await self.search_tool(generated_query)
 
@@ -108,14 +123,12 @@ class CritiquePanel:
         print("-> [Прагматик] Запущен.")
         critique = await self._run_critic("Прагматик", self._PRAGMATIST_PROMPT_TEMPLATE, hypothesis_text=hypothesis)
         print("-> [Прагматик] Отзыв сформирован.")
-        await asyncio.sleep(4)
         return critique
 
     async def _run_strategist(self, hypothesis: str) -> str:
         print("-> [Стратег] Запущен.")
         critique = await self._run_critic("Стратег", self._STRATEGIST_PROMPT_TEMPLATE, hypothesis_text=hypothesis)
         print("-> [Стратег] Отзыв сформирован.")
-        await asyncio.sleep(5)
         return critique
 
     async def run_full_analysis(self, hypothesis: str, source_materials: List[Dict[str, Any]]) -> Dict[str, str]:

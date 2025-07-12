@@ -7,7 +7,7 @@ from backend.agents.classes import Hypothesis, GraphState, format_hypotheses_and
 from langchain_core.prompts import ChatPromptTemplate
 from ..classes import SearchRequest
 import time
-
+from backend.token_count import token_count
 
 class HypothesesList(BaseModel):
     is_search_required: bool = Field(
@@ -20,7 +20,7 @@ class HypothesesList(BaseModel):
 
 def formulator_node(state: GraphState) -> dict:
     print("--- NODE: Hypothesis Formulation ---")
-
+    global token_count
     parser = PydanticOutputParser(pydantic_object=HypothesesList)
 
     search_history = format_search_history(state['search_history'])
@@ -32,29 +32,39 @@ def formulator_node(state: GraphState) -> dict:
     prompt = ChatPromptTemplate.from_template(FORMULATOR_INITIAL_PROMPT).partial(
         format_instructions=parser.get_format_instructions())
 
-    chain = prompt | llm | parser
+    # Цепочка без парсера для получения метаданных
+    llm_chain = prompt | llm
 
-    time.sleep(5)
+    chain_input = {
+        "user_question": state['user_question'],
+        "search_history": search_history,
+        "hypotheses_and_critics": hypotheses_and_critics
+    }
+
     try:
-        res = chain.invoke({
-            "user_question": state['user_question'],
-            "search_history": search_history,
-            "hypotheses_and_critics": hypotheses_and_critics
-        })
+        print(1)
+        llm_response = llm_chain.invoke(chain_input)
+        print(2)
+        if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
+            token_count += llm_response.usage_metadata.get('total_tokens', 0)
+            print(3)
+        res = parser.parse(llm_response.content)
+        print(4)
+
     except Exception as e:
+        print(5)
+        print(f"Exception: {e}")
         time.sleep(20)
-        res = chain.invoke({
-            "user_question": state['user_question'],
-            "search_history": search_history,
-            "hypotheses_and_critics": hypotheses_and_critics
-        })
+        llm_response = llm_chain.invoke(chain_input)
+        if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
+            token_count += llm_response.usage_metadata.get('total_tokens', 0)
+        res = parser.parse(llm_response.content)
 
     if res.is_search_required:
         print(f"-> Formulator requires a search with query: '{res.search_query}'")
         req = SearchRequest(
             input_query=res.search_query
         )
-        # Устанавливаем current_search_request, чтобы маршрутизатор отправил нас в 'searcher'
         return {"current_search_request": req}
     else:
         print(f"-> Formulator generated {len(res.hypotheses)} hypotheses.")
@@ -73,7 +83,6 @@ def formulator_node(state: GraphState) -> dict:
 
         hypotheses_versions.append(new_hypotheses)
 
-        # Обновляем гипотезы и сбрасываем current_search_request, чтобы маршрутизатор отправил нас в 'critics'
         return {
             'hypotheses_and_critics': hypotheses_versions,
             'current_search_request': None

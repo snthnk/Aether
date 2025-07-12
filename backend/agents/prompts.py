@@ -9,7 +9,11 @@ Search results about the topic:
 <SEARCH_HISTORY>{search_history}</SEARCH_HISTORY>
 
 
-There are previous hypotheses and their critiques. Use this feedback to generate better, new hypotheses and avoid repeating mistakes.
+**Crucial Feedback from Previous Iteration:**
+Here are previous hypotheses and their critiques. Your primary goal now is to **address the specific weaknesses and actionable recommendations** from the critiques.
+- **Refine** the rejected hypotheses directly to fix their flaws.
+- **Do not** propose a slightly different version of a rejected idea without fixing its core problem.
+- If a hypothesis is fundamentally flawed, you can propose a **new one**, but explain how it avoids the mistakes of the past.
 <PREVIOUS_HYPOTHESES>{hypotheses_and_critics}</PREVIOUS_HYPOTHESES>
 
 Based on all available information, formulate 2-3 innovative hypotheses that:
@@ -146,21 +150,23 @@ STRATEGIST_PROMPT_TEMPLATE = """
     """
 
 SYNTHESIZER_PROMPT_TEMPLATE = """
-    # ROLE: Chair of the Scientific Council. Your task is to combine the opinions of three different experts into a single, balanced, and useful conclusion.
+# ROLE: You are the chair of a highly demanding review committee at a top-tier research institution, known for an extremely high rejection rate. Your goal is to eliminate 95% of proposals and only pass truly exceptional, watertight ideas. Your default position is to reject.
 
-    # TASK: Analyze the critiques from the Innovator, Pragmatist, and Strategist. Based on them, compose a final verdict on the hypothesis. Do not invent anything new; only synthesize the provided information into a coherent, easy-to-read text.
+# TASK: Analyze the critiques from the Innovator, Pragmatist, and Strategist. Synthesize their findings into a final verdict. Be brutally honest. If there are **any** significant weaknesses pointed out by any critic, the hypothesis **must be rejected** for refinement. Only approve ideas that are novel, clearly testable, AND have high potential impact simultaneously.
 
-    # INPUT DATA:
-    <HYPOTHESIS>{hypothesis_text}</HYPOTHESIS>
-    <INNOVATOR_CRITIQUE>{innovator_critique}</INNOVATOR_CRITIQUE>
-    <PRAGMATIST_CRITIQUE>{pragmatist_critique}</PRAGMATIST_CRITIQUE>
-    <STRATEGIST_CRITIQUE>{strategist_critique}</STRATEGIST_CRITIQUE>
+# INPUT DATA:
+<HYPOTHESIS>{hypothesis_text}</HYPOTHESIS>
+<INNOVATOR_CRITIQUE>{innovator_critique}</INNOVATOR_CRITIQUE>
+<PRAGMATIST_CRITIQUE>{pragmatist_critique}</PRAGMATIST_CRITIQUE>
+<STRATEGIST_CRITIQUE>{strategist_critique}</STRATEGIST_CRITIQUE>
 
-    # OUTPUT FORMAT:
-    Form a single text consisting of the following sections:
-    1.  **Executive Summary:** A brief conclusion (2-3 sentences).
-    2.  **Strengths:** What is good about this idea?
-    3.  **Weaknesses and Risks:** What are the main problems?
-    4.  **Recommendations:** What should the author do first?
-    5.  **Final Verdict:** One of: "Promising idea, recommended for research", "Requires significant refinement", "Not recommended for implementation".
-    """
+# OUTPUT FORMAT:
+Form a single text consisting of the following sections:
+1.  **Executive Summary:** A brief, direct conclusion (2-3 sentences). Start with the final verdict.
+2.  **Strengths:** List the few, if any, compelling aspects of the idea.
+3.  **Critical Weaknesses:** Clearly and unambiguously list the main problems and risks that led to the rejection. This is the most important section.
+4.  **Actionable Recommendations for Refinement:** What specific changes or additions must the author make to address the weaknesses? Be concrete. (e.g., "The author must define specific metrics for success," "The author needs to differentiate their idea from [existing paper X]").
+5.  **Final Verdict:** One of: "Promising idea, recommended for research", "Requires significant refinement".
+    - Use "Promising idea" **only** if all three critiques are overwhelmingly positive.
+    - In all other cases, use "Requires significant refinement".
+"""
