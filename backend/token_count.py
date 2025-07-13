@@ -1,1 +1,2 @@
-token_count = 0
+token_count = {
+    "token_count": 0}

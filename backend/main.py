@@ -9,38 +9,66 @@ from backend.llm.llms import llm
 import time
 from backend.agents.constants import MAX_REFINEMENT_CYCLES
 import token_count
+import re
 
 # --- Узлы и логика маршрутизации ---
 
 def end_node(state: GraphState) -> dict:
-    """Финальный узел, который завершает работу и выводит результат."""
-    print("\n--- NODE: End ---")
-    final_hypotheses: List[Hypothesis] = []
-    if state.get('hypotheses_and_critics'):
-        # Собираем все одобренные гипотезы из последней итерации
-        latest_hypotheses = state['hypotheses_and_critics'][-1]
-        final_hypotheses = [h for h in latest_hypotheses if h.is_approved]
+    """Финальный узел, который завершает работу и выводит итоговый отчет по гипотезам."""
+    print("\n\n" + "=" * 40 + " FINAL REPORT " + "=" * 40)
 
-    if final_hypotheses:
-        print("\n✅ Итоговые перспективные гипотезы:")
-        for i, hyp in enumerate(final_hypotheses):
-            answer = hyp.formulation
-            translated_answer = llm.invoke(
-                f"Translate the following text into Russian while keeping the key terms and names in English. Don't write anything else, just the translation.\nHere is the text: {answer}"
-            )
+    hypotheses_and_critics = state.get('hypotheses_and_critics')
+    if not hypotheses_and_critics:
+        print("\n❌ No hypotheses were generated during the process.")
+        print("=" * 94)
+        return {}
 
-            if hasattr(translated_answer, "usage_metadata") and translated_answer.usage_metadata:
-                token_count.token_count += translated_answer.usage_metadata.get('input_tokens', 0) + translated_answer.usage_metadata.get('output_tokens', 0)
-                print(token_count.token_count)
+    final_hypotheses_version = hypotheses_and_critics[-1]
 
-            print(f"\n--- Гипотеза #{i + 1} ---")
-            print(f"Формулировка: {str(translated_answer)}")
-            print("\nКритика:")
-            print(hyp.critique)
-    else:
-        print("\n❌ Не удалось выработать перспективную гипотезу после всех итераций.")
+    print(f"\nSummary of the final iteration (Version {len(hypotheses_and_critics)}):")
+    print("-" * 30)
 
+    for i, hyp in enumerate(final_hypotheses_version):
+        status = "✅ Approved" if hyp.is_approved else "❌ Rejected"
+        print(f"\n--- Hypothesis #{i + 1}: {status} ---")
+
+        try:
+            # Пытаемся получить content из объекта сообщения, если он есть
+            formulation_text = hyp.formulation.content if hasattr(hyp.formulation, 'content') else hyp.formulation
+            translated_formulation = llm.invoke(
+                f"Translate the following hypothesis formulation into Russian, keeping key technical terms and names in English. Provide only the translation.\n\nText: {formulation_text}"
+            ).content
+        except Exception as e:
+            print(f"[Translation Error: {e}]")
+            translated_formulation = hyp.formulation
+
+        print(f"Formulation: {translated_formulation}")
+
+        if not hyp.is_approved and hyp.critique:
+            print("\nCritique Summary:")
+            critique_text = hyp.critique.content if hasattr(hyp.critique, 'content') else hyp.critique
+
+            # Извлекаем ключевые части из критики для краткого отчета
+            summary_match = re.search(r"Executive Summary:(.*?)Strengths:", critique_text, re.DOTALL | re.IGNORECASE)
+            recommendations_match = re.search(r"Actionable Recommendations for Refinement:(.*?)Final Verdict:",
+                                              critique_text, re.DOTALL | re.IGNORECASE)
+
+            if summary_match:
+                summary = summary_match.group(1).strip()
+                translated_summary = llm.invoke(
+                    f"Translate the following executive summary into Russian, keeping key technical terms and names in English. Provide only the translation.\n\nText: {summary}"
+                ).content
+                print(f"  - Summary: {translated_summary}")
+            if recommendations_match:
+                recommendations = recommendations_match.group(1).strip()
+                translated_recommendations = llm.invoke(
+                    f"Translate the following actionable recommendations into Russian, keeping key technical terms and names in English. Provide only the translation.\n\nText: {recommendations}"
+                ).content
+                print(f"  - Recommendations: {translated_recommendations}")
+
+    print("\n\n" + "=" * 94)
     return {}
+
 
 def route_from_formulator(state: GraphState) -> str:
     """Принимает решение после формулировщика: искать информацию или критиковать."""
@@ -127,15 +155,9 @@ app = workflow.compile()
 # --- Запуск ---
 
 async def main():
-    global token_count
     query = input("Введите ваш вопрос: ")
-
-    translation = llm.invoke(
-        f"You have been given a user request. Translate it into English. If it is already in English, simply duplicate the request. Don't write anything else, just the translation.\n\nUser request: {query}"
-    )
-
-    if hasattr(translation, "usage_metadata") and translation.usage_metadata:
-        token_count.token_count += translation.usage_metadata.get('input_tokens', 0) + translation.usage_metadata.get('output_tokens', 0)
+    prompt = f"You have been given a user request. Translate it into English. If it is already in English, simply duplicate the request. Don't write anything else, just the translation.\n\nUser request: {query}"
+    translation = llm.invoke(prompt)
 
     query = str(translation)  # если это object, вытягиваем текст
 
@@ -159,7 +181,7 @@ async def main():
         if agent in ["_write", "RunnableSequence", "__start__", "__end__", "LangGraph"]:
             continue
         if event_type == 'on_chat_model_stream':
-            print(event['data']['chunk'].content)
+            print(event['data']['chunk'].content, end='')
         elif event_type == 'on_chain_start':
             print(f"\n<{agent}>")
         elif event_type == 'on_chain_end':
@@ -171,4 +193,3 @@ if __name__ == "__main__":
     asyncio.run(main())
     end = time.time()
     print(f"Total time: {end - start}")
-    print(f"Token count: {token_count}")

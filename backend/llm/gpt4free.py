@@ -47,7 +47,8 @@ class GPT4Free(BaseChatModel):
 
         message = response.choices[0].message.content
         # Добавляем перенос строки в конце сообщения
-
+        if message and not message.endswith('\n'):
+            message += '\n'
         return ChatResult(
             generations=[ChatGeneration(message=AIMessage(content=message))]
         )
@@ -96,7 +97,7 @@ class GPT4Free(BaseChatModel):
 
             # Добавляем перенос строки в конце сообщения
             if last_chunk_yielded:
-                yield ChatGenerationChunk(message=AIMessageChunk(content=''))
+                yield ChatGenerationChunk(message=AIMessageChunk(content='\n'))
 
         except Exception as e:
             # Fallback to non-streaming if streaming fails
@@ -112,7 +113,7 @@ class GPT4Free(BaseChatModel):
                     yield ChatGenerationChunk(message=AIMessageChunk(content=" " + word))
                 await asyncio.sleep(0.05)  # Small delay between words
             # Добавляем перенос строки в конце fallback сообщения
-            yield ChatGenerationChunk(message=AIMessageChunk(content=''))
+            yield ChatGenerationChunk(message=AIMessageChunk(content='\n'))
 
     def _stream(
             self,
@@ -142,7 +143,7 @@ class GPT4Free(BaseChatModel):
 
             # Добавляем перенос строки в конце сообщения
             if last_chunk_yielded:
-                yield ChatGenerationChunk(message=AIMessageChunk(content=''))
+                yield ChatGenerationChunk(message=AIMessageChunk(content='\n'))
 
         except Exception as e:
             print(f"Sync streaming failed, falling back to non-streaming: {e}")

@@ -164,8 +164,8 @@ SYNTHESIZER_PROMPT_TEMPLATE = """
 Form a single text consisting of the following sections:
 1.  **Executive Summary:** A brief, direct conclusion (2-3 sentences). Start with the final verdict.
 2.  **Strengths:** List the few, if any, compelling aspects of the idea.
-3.  **Critical Weaknesses:** Clearly and unambiguously list the main problems and risks that led to the rejection. This is the most important section.
-4.  **Actionable Recommendations for Refinement:** What specific changes or additions must the author make to address the weaknesses? Be concrete. (e.g., "The author must define specific metrics for success," "The author needs to differentiate their idea from [existing paper X]").
+3.  **Critical Weaknesses:** Clearly and unambiguously list the main problems and risks that led to the rejection. This is the most important section. Start this section by identifying the single most critical flaw (e.g., "Primary Blocker: The idea is not novel and is a re-statement of paper X.").
+4.  **Actionable Recommendations for Refinement:** What specific changes or additions must the author make to address the weaknesses? Be concrete and provide actionable steps. Instead of "Improve novelty," write "Differentiate the approach from [existing paper X] by highlighting [specific mechanism Y]."
 5.  **Final Verdict:** One of: "Promising idea, recommended for research", "Requires significant refinement".
     - Use "Promising idea" **only** if all three critiques are overwhelmingly positive.
     - In all other cases, use "Requires significant refinement".

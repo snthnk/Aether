@@ -20,7 +20,6 @@ from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
 from backend.agents.constants import MIN_VALIDATED_ARTICLES, MAX_SEARCH_CYCLES, MAX_ARTICLES_COUNT
 from backend.agents.classes import SearchRequest, GraphState
-from backend.token_count import token_count
 
 
 def download_arxiv_html_article(article_id: str) -> Optional[str]:
@@ -62,7 +61,6 @@ class SearchQueryPlanner(BaseModel):
 
 
 def plan_search_queries_node(state: GraphState) -> GraphState:
-    global token_count
     cycle_count = state['search_cycles'] + 1
     print(f"\n--- 🧠 АГЕНТ-ПЛАНИРОВЩИК (ЦИКЛ {cycle_count}/{MAX_SEARCH_CYCLES}) ---")
     parser = JsonOutputParser(pydantic_object=SearchQueryPlanner)
@@ -89,16 +87,13 @@ def plan_search_queries_node(state: GraphState) -> GraphState:
     }
 
     try:
+        time.sleep(1.5)
         llm_response = llm_chain.invoke(chain_input)
-        if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
-            token_count += llm_response.usage_metadata.get('total_tokens', 0)
         plan = parser.parse(llm_response.content)
     except Exception as e:
         print(f"  [!] Ошибка при генерации нового плана поиска: {e}")
         time.sleep(20)
         llm_response = llm_chain.invoke(chain_input)
-        if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
-            token_count += llm_response.usage_metadata.get('total_tokens', 0)
         plan = parser.parse(llm_response.content)
 
     new_queries = plan['queries']
@@ -192,9 +187,7 @@ def search_arxiv_node(state: GraphState) -> GraphState:
 
 
 # ========================= УЗЕЛ СКАЧИВАНИЯ И СУММАРИЗАЦИИ =========================
-# ========================= УЗЕЛ СКАЧИВАНИЯ И СУММАРИЗАЦИИ =========================
 def fetch_and_summarize_node(state: GraphState) -> GraphState:
-    global token_count
     print("\n--- 📥✍️ АГЕНТ-СУММАРИЗАТОР: СКАЧИВАЮ И ДЕЛАЮ РЕЗЮМЕ ---")
     papers = state['papers']
     existing_summaries = state['summaries']
@@ -206,36 +199,47 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
         return state
 
     print(f"  [*] Найдено {len(new_papers)} новых статей для суммризации.")
-    # ИСПРАВЛЕНИЕ: Убираем StrOutputParser() из цепочки, чтобы получить полный объект ответа от LLM
     summarizer_chain = ChatPromptTemplate.from_template(SEARCH_SUMMARIZER_PROMPT) | llm
     new_summaries = []
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
 
     for i, paper in enumerate(new_papers):
-        if len(new_summaries) == MAX_ARTICLES_COUNT:
+        if len(new_summaries) >= MAX_ARTICLES_COUNT:
             break
         title = paper.get('title', 'Без названия')
-        authors = ", ".join([a.get("author", {}).get("display_name", "N/A") for a in paper.get("authorships", [])])
+        authors_list = []
+        for a in paper.get("authorships", []):
+            if a and isinstance(a, dict):
+                author_info = a.get("author")
+                if author_info and isinstance(author_info, dict):
+                    authors_list.append(author_info.get("display_name", "N/A"))
+                else:
+                    authors_list.append("N/A")
+        authors = ", ".join(authors_list)
+
         print(f"\n  [{i + 1}/{len(new_papers)}] Обрабатываю: '{title[:70]}...'")
         pdf_url, source_display_name = None, "N/A"
         best_location = paper.get('best_oa_location')
 
         if best_location:
             source_dict = best_location.get('source')
-            if source_dict:
+            if source_dict and isinstance(source_dict, dict):
                 source_display_name = source_dict.get('display_name', 'N/A')
 
             pdf_url = best_location.get('pdf_url')
             if not pdf_url:
                 landing_page_url = best_location.get('landing_page_url', '')
-                if 'arxiv.org/abs' in landing_page_url: pdf_url = landing_page_url.replace('/abs/', '/pdf/')
+                if landing_page_url and 'arxiv.org/abs' in landing_page_url:
+                    pdf_url = landing_page_url.replace('/abs/', '/pdf/')
 
         if not pdf_url:
             for loc in paper.get('locations', []):
-                if loc and loc.get('pdf_url'):
+                if loc and isinstance(loc, dict) and loc.get('pdf_url'):
                     pdf_url = loc['pdf_url']
-                    source_display_name = loc.get('source', {}).get('display_name', 'N/A')
+                    source_dict = loc.get('source')
+                    if source_dict and isinstance(source_dict, dict):
+                        source_display_name = source_dict.get('display_name', 'N/A')
                     break
         text_content = None
         if pdf_url:
@@ -252,6 +256,7 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
                     print(f"    [!] PDF скачан, но в нем мало текста.")
             except Exception as e:
                 print(f"    [!] Не удалось обработать PDF {pdf_url}: {e}")
+
         is_arxiv_source = 'arxiv' in source_display_name.lower() or ('arxiv.org' in str(paper.get('id', '')))
         if not text_content and is_arxiv_source:
             arxiv_id_match = re.search(r'(\d{4}\.\d{4,5}(v\d+)?)', str(paper.get('id', '')))
@@ -266,19 +271,13 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
         if text_content:
             print("    [*] Создаю резюме...")
             try:
-                # Теперь llm_response будет объектом AIMessage
+                time.sleep(5)
                 llm_response = summarizer_chain.invoke({"paper_text": text_content})
-                if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
-                    token_count += llm_response.usage_metadata.get('total_tokens', 0)
-                # ИСПРАВЛЕНИЕ: Извлекаем текст из .content
                 summary_text = llm_response.content
             except Exception as e:
                 print(f"    [!] Ошибка при создании резюме: {e}")
                 time.sleep(20)
-                # Повторяем ту же логику
                 llm_response = summarizer_chain.invoke({"paper_text": text_content})
-                if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
-                    token_count += llm_response.usage_metadata.get('total_tokens', 0)
                 summary_text = llm_response.content
 
             new_summaries.append({"title": title, "authors": authors, "source": pdf_url or paper.get('id'),
@@ -293,7 +292,6 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
 
 # ========================= УЗЕЛ ВАЛИДАЦИИ РЕЗЮМЕ =========================
 def validate_summaries_node(state: GraphState) -> GraphState:
-    global token_count
     print("\n--- ✅ АГЕНТ-ВАЛИДАТОР: ПРОВЕРЯЮ РЕЛЕВАНТНОСТЬ НОВЫХ РЕЗЮМЕ ---")
     original_query = state['current_search_request'].input_query if state['current_search_request'] else ""
 
@@ -316,17 +314,14 @@ def validate_summaries_node(state: GraphState) -> GraphState:
     for summary_data in summaries_to_validate:
         chain_input = {"original_query": original_query, "summary_text": summary_data['summary']}
         try:
+            time.sleep(5)
             llm_response = validation_chain.invoke(chain_input)
-            if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
-                token_count += llm_response.usage_metadata.get('total_tokens', 0)
             result = llm_response.content.strip().lower()
 
         except Exception as e:
             print(f"  [!] Ошибка при валидации резюме: {e}")
             time.sleep(20)
             llm_response = validation_chain.invoke(chain_input)
-            if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
-                token_count += llm_response.usage_metadata.get('total_tokens', 0)
             result = llm_response.content.strip().lower()
 
         if "yes" in result:

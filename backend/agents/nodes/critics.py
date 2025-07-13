@@ -69,38 +69,30 @@ class CritiquePanel:
         self.search_tool = search_tool
 
     async def _run_critic(self, critic_name: str, prompt_template: str, **kwargs) -> str:
-        global token_count
         prompt = ChatPromptTemplate.from_template(prompt_template)
         chain = prompt | self.llm
         try:
+            await asyncio.sleep(10)
             response = await chain.ainvoke(kwargs)
-            if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                token_count += response.usage_metadata.get('total_tokens', 0)
         except Exception as e:
             print(f"Возникла ошибка во время работы критика {e}")
             await asyncio.sleep(20)
             response = await chain.ainvoke(kwargs)
-            if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                token_count += response.usage_metadata.get('total_tokens', 0)
 
         return response.content
 
     async def _run_innovator(self, hypothesis: str, source_materials_text: str) -> str:
-        global token_count
         print("-> [Новатор] Запущен.")
         query_gen_prompt = self._SEARCH_QUERY_GENERATOR_PROMPT.format(hypothesis_text=hypothesis)
         try:
+            await asyncio.sleep(10)
             llm_response = await self.llm.ainvoke(query_gen_prompt)
-            if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
-                token_count += llm_response.usage_metadata.get('total_tokens', 0)
             generated_query = llm_response.content.strip()
 
         except Exception as e:
             print(f"Возникла ошибка во время работы критика {e}")
             await asyncio.sleep(20)
             llm_response = await self.llm.ainvoke(query_gen_prompt)
-            if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
-                token_count += llm_response.usage_metadata.get('total_tokens', 0)
             generated_query = llm_response.content.strip()
 
         search_results_list = await self.search_tool(generated_query)

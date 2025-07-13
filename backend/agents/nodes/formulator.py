@@ -20,7 +20,6 @@ class HypothesesList(BaseModel):
 
 def formulator_node(state: GraphState) -> dict:
     print("--- NODE: Hypothesis Formulation ---")
-    global token_count
     parser = PydanticOutputParser(pydantic_object=HypothesesList)
 
     search_history = format_search_history(state['search_history'])
@@ -32,7 +31,6 @@ def formulator_node(state: GraphState) -> dict:
     prompt = ChatPromptTemplate.from_template(FORMULATOR_INITIAL_PROMPT).partial(
         format_instructions=parser.get_format_instructions())
 
-    # Цепочка без парсера для получения метаданных
     llm_chain = prompt | llm
 
     chain_input = {
@@ -42,22 +40,20 @@ def formulator_node(state: GraphState) -> dict:
     }
 
     try:
-        print(1)
+        time.sleep(1.5)
         llm_response = llm_chain.invoke(chain_input)
-        print(2)
-        if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
-            token_count += llm_response.usage_metadata.get('total_tokens', 0)
-            print(3)
         res = parser.parse(llm_response.content)
-        print(4)
 
     except Exception as e:
-        print(5)
-        print(f"Exception: {e}")
+        print("\n--- ERROR: Failed to parse LLM response in Formulator ---")
+        print(f"Exception Type: {type(e)}")
+        print(f"Exception Details: {e}")
+        # Логируем "сырой" ответ от LLM, который вызвал ошибку
+        raw_output = llm_response.content if 'llm_response' in locals() else "LLM response not available"
+        print(f"Problematic LLM Output:\n---\n{raw_output}\n---")
+        print("Retrying after a 20-second delay...")
         time.sleep(20)
         llm_response = llm_chain.invoke(chain_input)
-        if hasattr(llm_response, 'usage_metadata') and llm_response.usage_metadata:
-            token_count += llm_response.usage_metadata.get('total_tokens', 0)
         res = parser.parse(llm_response.content)
 
     if res.is_search_required:
