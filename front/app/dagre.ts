@@ -1,20 +1,24 @@
 import dagre from '@dagrejs/dagre';
 import {Edge, Node, Position} from "@xyflow/react";
+import {ComponentType} from "react";
 
-const nodeWidth = 250;
-const nodeHeight = 125;
+const nodeWidth = 350;
+const nodeHeight = 225;
 
 export const getLayoutedElements = (nodes: {
     id: string
     type: string
     title: string
     description: string
+    isRunning: boolean
+    streamedData?: any
+    dataComponent?: ComponentType<{ data: any }>
 }[], edges: Edge[]) => {
     const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
     dagreGraph.setGraph({rankdir: 'TB'});
 
     nodes.forEach((node) => {
-        dagreGraph.setNode(node.id, {width: nodeWidth, height: node.id !== "prompt" ? nodeHeight : 300});
+        dagreGraph.setNode(node.id, {width: nodeWidth, height: nodeHeight});
     });
 
     edges.forEach((edge) => {
@@ -31,8 +35,11 @@ export const getLayoutedElements = (nodes: {
             targetPosition: Position.Top,
             sourcePosition: Position.Bottom,
             data: {
+                isRunning: node.isRunning,
                 title: node.title,
                 description: node.description,
+                dataComponent: node.dataComponent,
+                streamedData: node.streamedData
             },
             position: {
                 x: nodeWithPosition.x - nodeWidth / 2,

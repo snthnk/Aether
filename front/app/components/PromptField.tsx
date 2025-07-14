@@ -20,7 +20,11 @@ export const PromptField = () => {
                       placeholder="Введите промпт для генерации гипотез..."/>
             <Button
                 onClick={() => {
-                    const {nodes: layoutedNodes} = getLayoutedElements([{...initialNodes[0], type: 'prompt'}], [])
+                    const {nodes: layoutedNodes} = getLayoutedElements([{
+                        ...initialNodes[0],
+                        type: 'prompt',
+                        isRunning: false
+                    }], [])
                     setNodes(layoutedNodes);
                     setEdges([]);
                     setActivated(true);

@@ -1,10 +1,9 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 'use client'
 
 import {Background, Controls, Edge, MarkerType, Node, ReactFlow, useEdgesState, useNodesState} from '@xyflow/react';
 
 import '@xyflow/react/dist/style.css';
-import {createContext} from "react";
+import {createContext, Dispatch, SetStateAction} from "react";
 import {PromptField} from "@/app/components/PromptField";
 import initialNodes from "@/app/chartElements/nodes";
 import DefaultNode from "@/app/components/DefaultNode";
@@ -15,8 +14,8 @@ export const FlowContext = createContext<{
     nodes: Node[],
     edges: Edge[],
     data: Record<string, string> | null,
-    setNodes: (nodes: Node[]) => void,
-    setEdges: (edges: Edge[]) => void,
+    setNodes: Dispatch<SetStateAction<Node[]>>,
+    setEdges: Dispatch<SetStateAction<Edge[]>>,
     isConnected: boolean,
     connect: (prompt: string) => void,
 }>({
@@ -45,7 +44,7 @@ export default function FlowChart() {
             <ReactFlow
                 proOptions={{hideAttribution: true}}
                 nodes={nodes.map(e => ({
-                    style: {width: 250},
+                    style: {width: 350},
                     ...e,
                 }))}
                 edges={edges.map(e => ({

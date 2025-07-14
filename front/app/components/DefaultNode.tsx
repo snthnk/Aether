@@ -1,21 +1,18 @@
 import {BaseNode} from "@/components/base-node";
 import {Handle, Position} from "@xyflow/react";
 import {NodeStatusIndicator} from "@/components/node-status-indicator";
-import {CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import {CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Badge} from "@/components/ui/badge";
-import {useContext} from "react";
-import {FlowContext} from "@/app/FlowChart";
+import {ComponentType} from "react";
 
-export default function DefaultNode({id, data}: { id: string, data: { title: string, description: string } }) {
-    const {nodes} = useContext(FlowContext)
-    const {isConnected} = useContext(FlowContext)
-    const isRunning = isConnected && nodes[nodes.length - 1].id === id;
+export default function DefaultNode({id, data}: { id: string, data: { title: string, description: string, dataComponent: ComponentType<{data: any}>, streamedData: any, isRunning?: boolean } }) {
+    const isRunning = data.isRunning
     return (
         <NodeStatusIndicator status={!isRunning ? "success" : "loading"}>
-            <BaseNode>
+            <BaseNode className="nowheel">
                 <Handle type="target" position={Position.Top}/>
                 {!id.startsWith("end") && <Handle type="source" position={Position.Bottom}/>}
-                <CardHeader className="p-0">
+                <CardHeader className="p-0 pb-2">
                     <CardTitle className="flex justify-between">
                         <p>{data.title}</p>
                         <Badge
@@ -25,6 +22,9 @@ export default function DefaultNode({id, data}: { id: string, data: { title: str
                         {data.description}
                     </CardDescription>
                 </CardHeader>
+                <CardContent className="p-0">
+                    <data.dataComponent data={data.streamedData}/>
+                </CardContent>
             </BaseNode>
         </NodeStatusIndicator>
     );
