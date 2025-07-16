@@ -9,6 +9,7 @@ import initialNodes from "@/app/chartElements/nodes";
 import DefaultNode from "@/app/components/DefaultNode";
 import useSSE from "@/app/useSSE";
 import StreamData from "@/app/StreamData";
+import {toast} from "sonner";
 
 export const FlowContext = createContext<{
     nodes: Node[],
@@ -35,7 +36,9 @@ export default function FlowChart() {
     const [nodes, setNodes] = useNodesState<Node>([]);
     const [edges, setEdges] = useEdgesState<Edge>([]);
 
-    const {connect, data, isConnected} = useSSE();
+    const {connect, data, isConnected} = useSSE({
+        onError: () => nodes.length === 1 && toast.error("Ошибка подключения к серверу.", {richColors: true})
+    });
 
     return (
         <FlowContext.Provider value={{
