@@ -1,16 +1,20 @@
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 from langgraph.graph import MessagesState
+import re
+
 
 class SearchRequest(BaseModel):
     input_query: str = Field(description="Короткий запрос на поиск, который подается в начале этого модуля")
     search_queries: List[str] = Field(default_factory=list, description="Запросы в браузер, которые генерирует агент")
     results: List[Dict] = Field(default_factory=list, description="Список из нескольких валидированных резюме")
 
+
 class Hypothesis(BaseModel):
     formulation: str
     critique: str
     is_approved: bool
+
 
 class GraphState(MessagesState):
     user_question: str
@@ -27,46 +31,98 @@ class GraphState(MessagesState):
     validated_summaries: List[Dict]
     final_report: Optional[str]
     error: Optional[str]
-    search_cycles: int
+    # search_cycles используется внутри поискового графа, поэтому его нужно оставить
+    search_cycles: int = 0
+
 
 class SearchQueryPlannerOutput(BaseModel):
     """
     Pydantic-модель для вывода планировщика поисковых запросов.
     Описывает структуру JSON, которую должен сгенерировать LLM.
     """
-    queries: List[str] = Field(description="Список из 3-5 альтернативных и разнообразных поисковых запросов для нахождения статей.")
+    queries: List[str] = Field(
+        description="Список из 3-5 альтернативных и разнообразных поисковых запросов для нахождения статей.")
+
+
+# MODIFIED: Simplified the model as the decision logic is removed.
+class HypothesesList(BaseModel):
+    """Pydantic model for the output of the hypothesis formulator."""
+    hypotheses: List[str] = Field(
+        description="List of 2-3 innovative hypotheses based on the user question and provided search results."
+    )
 
 
 def format_search_history(search_history: list[SearchRequest], limit: int = 5) -> str:
-    search_history = search_history[-limit:]
-    
-    res = ""
-    for i, search in enumerate(search_history):
-        res += f"Search {i + 1}:\n"
-        res += f"- User query: {search.input_query}\n"
-        res += f"- Search queries: {', '.join(search.search_queries)}\n"
-        res += f"- Result: {search.results}\n"
-        res += "\n"
-    
-    return res
+    """
+    Форматирует историю поиска, предоставляя детальную информацию о каждой
+    статье, включая уникальный citation_tag и прямую ссылку для LLM.
+    """
+    if not search_history:
+        return "No search history available."
+
+    res_parts = []
+    # Используем словарь для отслеживания уже добавленных статей по заголовку,
+    # чтобы избежать дублирования в разных циклах поиска.
+    seen_titles = set()
+
+    # Итерируемся в обратном порядке, чтобы самые свежие результаты были первыми.
+    for i, search in enumerate(reversed(search_history[-limit:])):
+        res_parts.append(f"## Search Cycle Result (Query: '{search.input_query}')\n")
+
+        papers_in_cycle = []
+        for paper in search.results:
+            title = paper.get('title', 'N/A').strip()
+            if title in seen_titles:
+                continue # Пропускаем дубликаты
+            seen_titles.add(title)
+
+            # Создаем более читаемый тег для цитирования
+            # Пример: [Smith et al., 2021]
+            authors_list = paper.get('authors', 'Unknown Author').split(',')
+            first_author = authors_list[0].split()[-1] # Фамилия первого автора
+            # Извлекаем год из источника, если возможно (упрощенная логика)
+            source_link = paper.get('source', '')
+            year = 'N/A'
+            if 'arxiv' in source_link:
+                # Пытаемся извлечь год из arxiv id, например 2103.12345 -> 2021
+                match = re.search(r'/abs/(\d{2})', source_link)
+                if match:
+                    year = f"20{match.group(1)}"
+
+            # Финальный тег
+            citation_tag = f"[{first_author} et al., {year}]"
+
+            papers_in_cycle.append(
+                f"### Source Article: {citation_tag}\n"
+                f"- Title: {title}\n"
+                f"- Link: {source_link}\n"
+                f"- Summary: {paper.get('summary', 'No summary available.').replace(chr(10), ' ')}\n" # Заменяем переносы строк на пробелы
+            )
+
+        if not papers_in_cycle:
+            res_parts.append("  - No new relevant articles found in this cycle.\n")
+        else:
+            res_parts.extend(papers_in_cycle)
+
+    return "\n".join(res_parts)
+
 
 
 def format_hypotheses_and_critics(hypotheses_and_critics: list[list[Hypothesis]], limit: int = 5) -> str:
     hypotheses_and_critics = hypotheses_and_critics[-limit:]
-    
+
     res = ""
     for i, ver in enumerate(hypotheses_and_critics):
         res += f"Hypotheses version {i + 1}:\n"
-        
+
         for hyp in ver:
             if hyp.is_approved: continue
 
             res += f"- Hypothesis: {hyp.formulation}\n"
             if hyp.critique:
                 res += f"  Critique: {hyp.critique}\n"
-            # res += f"  Approved: {'Yes' if hyp.is_approved else 'No'}\n"
         res += "\n"
-    
+
     return res
 
 

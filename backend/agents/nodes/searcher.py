@@ -87,7 +87,7 @@ def plan_search_queries_node(state: GraphState) -> GraphState:
     }
 
     try:
-        time.sleep(1.5)
+        time.sleep(5)
         llm_response = llm_chain.invoke(chain_input)
         plan = parser.parse(llm_response.content)
     except Exception as e:
@@ -192,7 +192,7 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
     papers = state['papers']
     existing_summaries = state['summaries']
     summarized_titles = {s['title'] for s in existing_summaries}
-    new_papers = [p for p in papers if p.get('title') not in summarized_titles]
+    new_papers = [p for p in papers if p and p.get('title') and p.get('title') not in summarized_titles]
 
     if not new_papers:
         print("  [i] Нет новых статей для обработки в этом цикле.")
@@ -271,7 +271,6 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
         if text_content:
             print("    [*] Создаю резюме...")
             try:
-                time.sleep(5)
                 llm_response = summarizer_chain.invoke({"paper_text": text_content})
                 summary_text = llm_response.content
             except Exception as e:
@@ -314,7 +313,7 @@ def validate_summaries_node(state: GraphState) -> GraphState:
     for summary_data in summaries_to_validate:
         chain_input = {"original_query": original_query, "summary_text": summary_data['summary']}
         try:
-            time.sleep(5)
+            time.sleep(3)
             llm_response = validation_chain.invoke(chain_input)
             result = llm_response.content.strip().lower()
 
