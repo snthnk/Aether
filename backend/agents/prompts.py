@@ -25,10 +25,9 @@ Your behavior depends on the content of `<CRITIQUE_HISTORY>`:
 - You may need to combine ideas from different articles or focus on a different aspect of the research to satisfy the critique.
 
 # CRITICAL RULES (APPLY IN BOTH CASES)
-1.  **DATA-DRIVEN ONLY:** Your hypotheses must be derived **exclusively** from the information in the provided context (`<SEARCH_HISTORY>` and `<CRITIQUE_HISTORY>`). Do not use your internal knowledge.
-2.  **CITE YOUR SOURCES:** For each hypothesis, you **MUST** explicitly state which ideas are taken from which sources. Mention the source by its `citation_tag` (e.g., [Smith et al., 2021]) directly in the text of the formulation.
-3.  **PROVIDE LINKS:** In your final JSON output, for each hypothesis, you **MUST** provide the `source_paper_links` from the `<SEARCH_HISTORY>`.
-4.  **ONE CORE IDEA:** Each hypothesis must focus on **one single, testable idea**.
+1.  **CITE YOUR SOURCES:** For each hypothesis, you **MUST** explicitly state which ideas are taken from which sources. Mention the source by its `citation_tag` (e.g., [Smith et al., 2021]) directly in the text of the formulation.
+2.  **PROVIDE LINKS:** In your final JSON output, for each hypothesis, you **MUST** provide the `source_paper_links` from the `<SEARCH_HISTORY>`.
+3.  **ONE CORE IDEA:** Each hypothesis must focus on **one single, testable idea**.
 
 # OUTPUT FORMAT
 You MUST respond with a JSON object that strictly follows this format.
@@ -167,7 +166,18 @@ Form a unified text with these sections:
 2.  **Key Strengths:** 1-2 most compelling positive points from the Innovator, Pragmatist, and Strategist.
 3.  **Potential Weaknesses & Risks:** The most severe conceptual problems identified by the Innovator, Pragmatist, or Strategist.
 4.  **Recommendations for Implementation:** A clear, numbered list of commands for the author. This section should PRIMARILY be based on the feedback from the **Nitpicker Critic**, translating his questions into actionable steps for the author.
-5.  **Final Verdict:** Choose STRICTLY ONE option. Your decision MUST be based **only on the verdicts of the Innovator, Pragmatist, and Strategist**. The Nitpicker's critique should inform the recommendations but not block approval.
+5.  **Final Verdict:** First, explicitly list the individual verdicts from each expert critique to justify the final decision. Then, based on these verdicts, apply the decision rule and state the final conclusion using the exact phrase provided.
+
+    **Verdicts Summary:**
+    - Innovator's Verdict (Novelty): [Extract and state the verdict, e.g., HIGH, MEDIUM, LOW]
+    - Pragmatist's Verdict (Testability): [Extract and state the verdict, e.g., HIGH, MEDIUM, LOW]
+    - Strategist's Verdict (Potential Impact): [Extract and state the verdict, e.g., HIGH, MEDIUM, LOW]
+    - Nitpicker's Verdict (Implementation Clarity): [Extract and state the verdict, e.g., HIGH, MEDIUM, LOW)
+    
+    **Decision Rule:** If **ANY TWO** of the verdicts (Novelty, Testability, Potential Impact) is 'HIGH' AND NONE of them is 'LOW', the hypothesis is approved. Otherwise, it is rejected.
+
+    **- If Approved, use this exact phrase:** `Final Verdict: Promising idea, recommended for research.`
+    **- If Rejected, use this exact phrase:** `Final Verdict: Idea rejected, requires substantial revision.`
 """
 
 NITPICKER_PROMPT_TEMPLATE = """

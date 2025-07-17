@@ -204,8 +204,6 @@ def should_continue(state: GraphState) -> str:
     is_all_approved = all(h.is_approved for h in latest_hypotheses)
 
     print(f"  [i] Refinement cycle: {num_critique_cycles}/{MAX_REFINEMENT_CYCLES}")
-    print(f"  [i] Approved hypotheses in this round: {'Yes' if is_all_approved else 'No'}")
-
     if is_all_approved:
         print("-> All hypotheses approved. Ending process.")
         return "end"
@@ -214,7 +212,7 @@ def should_continue(state: GraphState) -> str:
         print(f"-> Refinement cycle limit reached ({MAX_REFINEMENT_CYCLES}). Ending with the current results.")
         return "end"
     else:
-        print("-> No approved hypotheses. Generating a refined search query based on critique.")
+        print("-> Not all hypotheses are approved. Generating a refined search query based on critique.")
         return "refine_and_search"
 
 
@@ -259,8 +257,10 @@ app = workflow.compile()
 
 async def main():
     query = input("Введите ваш вопрос: ")
+    print(1)
     prompt = f"You have been given a user request. Translate it into English. If it is already in English, simply duplicate the request. Don't write anything else, just the translation.\n\nUser request: {query}"
     translation = llm.invoke(prompt)
+    print(2)
 
     user_question = str(translation.content).strip()
 
