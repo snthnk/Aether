@@ -34,6 +34,12 @@ if model in ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-lite"]:
         },
     )
 
+elif model in ["gemma3:27b"]:
+    from langchain_ollama import ChatOllama
+
+    llm = ChatOllama(model=model, base_url=os.getenv("BASE_URL"), temperature=0.2)
+    llm_creative = ChatOllama(model=model, base_url=os.getenv("BASE_URL"), temperature=0.5)
+
 elif model in ["gpt-4o-mini",
                "deepseek-v3",
                "grok-3-mini-high",
