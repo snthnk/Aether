@@ -13,7 +13,8 @@ from backend.agents.prompts import (
     INNOVATOR_PROMPT_TEMPLATE, PRAGMATIST_PROMPT_TEMPLATE, STRATEGIST_PROMPT_TEMPLATE,
     NITPICKER_PROMPT_TEMPLATE, SYNTHESIZER_PROMPT_TEMPLATE, SURGICAL_SEARCH_SELECTOR_PROMPT)
 from backend.agents.classes import GraphState
-from backend.agents.constants import SURGICAL_SEARCH_FETCH_COUNT, SURGICAL_SEARCH_SELECT_COUNT
+from backend.agents.constants import SURGICAL_SEARCH_FETCH_COUNT, SURGICAL_SEARCH_SELECT_COUNT, \
+    HUMAN_IN_THE_LOOP_ENABLED
 
 
 # --- Pydantic models for structured output ---
@@ -145,7 +146,7 @@ class CritiquePanel:
         return await self._run_critic("Nitpicker", self._NITPICKER_PROMPT_TEMPLATE, hypothesis_text=hypothesis)
 
     async def run_full_analysis(self, hypothesis_index: int, hypothesis: str, source_materials: List[Dict[str, Any]]) -> \
-    Dict[str, str]:
+            Dict[str, str]:
         """Runs the entire panel of critics for a single hypothesis."""
         print(f"\n===== [HYPOTHESIS #{hypothesis_index + 1}] STARTING ANALYSIS =====\n\"{hypothesis[:100]}...\"")
         source_materials_text = "\n\n".join(
@@ -224,5 +225,32 @@ async def _critique_logic(state: GraphState) -> dict:
         else:
             hyp.is_approved = False
             print(f"-> [Critique Panel Verdict] Hypothesis REJECTED: '{hyp.formulation[:50]}...'")
+
+    # --- NEW: HUMAN-IN-THE-LOOP FEEDBACK STAGE ---
+    if HUMAN_IN_THE_LOOP_ENABLED and hypotheses_to_critique:
+        print("\n\n" + "=" * 40 + " HUMAN-IN-THE-LOOP FEEDBACK " + "=" * 40)
+        print("Вы можете добавить свои комментарии к каждой гипотезе.")
+        print("Ваши комментарии будут иметь НАИВЫСШИЙ приоритет для следующего шага доработки.")
+
+        for i, hyp in enumerate(latest_hypotheses_list):
+            print("\n" + "-" * 35 + f" Гипотеза #{i + 1} " + "-" * 35)
+
+            # Показываем формулировку и уже сгенерированную критику
+            formulation_text = hyp.formulation.content if hasattr(hyp.formulation, 'content') else hyp.formulation
+            critique_text = hyp.critique.content if hasattr(hyp.critique, 'content') else hyp.critique
+
+            print(f"\n[Формулировка]:\n{formulation_text}")
+            print(f"\n[Сводная критика от ИИ]:\n{critique_text}")
+
+            # Запрашиваем комментарий пользователя
+            user_comment = input(
+                f"\n> Ваш комментарий для гипотезы #{i + 1} (нажмите Enter, чтобы пропустить): ").strip()
+
+            if user_comment:
+                # Добавляем комментарий пользователя в специальном формате, который поймет Формулятор
+                user_feedback_block = f"\n\n<USER_COMMENT>\n{user_comment}\n</USER_COMMENT>"
+                hyp.critique += user_feedback_block
+                print("  [+] Ваш комментарий добавлен.")
+        print("\n" + "=" * 96)
 
     return {"hypotheses_and_critics": all_hypotheses_versions}
