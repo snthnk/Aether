@@ -3,12 +3,13 @@ import Formulator from "@/app/components/agents/Formulator";
 import Critic from "@/app/components/agents/Critic";
 import Searcher from "@/app/components/agents/Searcher";
 import Hypotheses from "@/app/components/agents/Hypotheses";
-import PrepareSearch from "@/app/components/agents/PrepareSearch";
+import PlanSearch from "@/app/components/agents/PlanSearch";
 import OpenAlexSearcher from "@/app/components/agents/OpenAlexSearcher";
 import ArxivSearcher from "@/app/components/agents/ArxivSearcher";
 import Summaries from "@/app/components/agents/Summaries";
 import ValidatedSummaries from "@/app/components/agents/ValidatedSummaries";
 import SearchReport from "@/app/components/agents/SearchReport";
+import PrepareSearch from "@/app/components/agents/PrepareSearch";
 
 const Empty = ()=>null
 
@@ -53,7 +54,7 @@ const initialNodes = [
         id: "plan_search_queries",
         title: "Планирование запросов",
         description: "Создаёт стратегию поиска по научным базам.",
-        dataComponent: PrepareSearch
+        dataComponent: PlanSearch
     },
     {
         id: "search_openalex",

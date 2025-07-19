@@ -144,6 +144,9 @@ class SSEServer:
                 if delay > 0:
                     await asyncio.sleep(delay)
 
+            else:
+                await asyncio.sleep(0.5)
+
             # Format message based on type
             if message['type'] == 'data':
                 yield f"data: {message['data']}\n\n"

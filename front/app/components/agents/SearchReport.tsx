@@ -1,16 +1,19 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import {Search} from "lucide-react";
+import MarkdownRenderer from "@/components/ui/markdown-renderer";
 
 export default function SearchReport({data}: { data: any }) {
     return (
-        <div className="flex gap-2 items-center text-muted-foreground text-xs">
-            <Search className="size-4"/>
+        <div className="flex gap-2 items-center">
             {data ? (
-                <p>{data.output.final_report}</p>
+                <MarkdownRenderer>{data.output.final_report}</MarkdownRenderer>
             ) : (
-                <TextShimmerWave className='font-mono' duration={1}>
-                    Пишу отчет по поиску...
-                </TextShimmerWave>
+                <>
+                    <Search className="size-4"/>
+                    <TextShimmerWave className='font-mono' duration={1}>
+                        Пишу отчет по поиску...
+                    </TextShimmerWave>
+                </>
             )}
         </div>
     );

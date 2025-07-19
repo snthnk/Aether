@@ -28,7 +28,8 @@ export const PromptField = () => {
                     setNodes(layoutedNodes);
                     setEdges([]);
                     setActivated(true);
-                    connect(`http://localhost:8000/generate?${new URLSearchParams({prompt}).toString()}`)
+                    connect(`http://localhost:8000/events?${new URLSearchParams({prompt}).toString()}&no_delay=true`)
+                    // connect(`http://localhost:8000/generate?${new URLSearchParams({prompt}).toString()}`)
                 }}
                 disabled={isConnected}><Send/> Отправить</Button>
         </BaseNode>

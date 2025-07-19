@@ -1,9 +1,9 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
-import {BadgeQuestionMark, Search} from "lucide-react";
+import {BadgeQuestionMark} from "lucide-react";
 
 export default function QueryRefiner({data}: { data: any }) {
     return (
-        <div className="flex gap-2 items-center text-muted-foreground text-xs">
+        <div className="flex gap-2 items-center  ">
             <BadgeQuestionMark className="size-4"/>
             {data ? (
                 <p className='font-mono'>
