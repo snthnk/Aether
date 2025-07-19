@@ -1,24 +1,15 @@
 import asyncio
-import json
-import pprint
-
-import uvicorn
 from langgraph.graph import StateGraph, END
-from pydantic import BaseModel
-from sse_starlette import EventSourceResponse
-from starlette.middleware.cors import CORSMiddleware
-
 from backend.agents.classes import GraphState, Hypothesis, SearchRequest
 from backend.agents.nodes.formulator import formulator_node
 from backend.agents.nodes.critics import _critique_logic as critics_node
 from backend.agents.nodes.searcher import node_make_research as searcher_node
 from backend.llm.llms import llm
 import time
-from backend.agents.constants import MAX_REFINEMENT_CYCLES, HUMAN_IN_THE_LOOP_ENABLED
+from backend.agents.constants import MAX_REFINEMENT_CYCLES
 from backend.agents.prompts import REFINE_SEARCH_PROMPT
 from langchain_core.prompts import ChatPromptTemplate
 import re
-from fastapi import FastAPI, Request
 
 
 # --- Вспомогательная функция для форматирования критики ---
@@ -67,7 +58,6 @@ def prepare_search_node(state: GraphState) -> dict:
         "search_cycles": 0,
     }
 
-
 def refine_search_query_node(state: GraphState) -> dict:
     """
     Анализирует критику и генерирует новый, более точный поисковый запрос.
@@ -94,48 +84,6 @@ def refine_search_query_node(state: GraphState) -> dict:
     }
 
 
-def human_in_the_loop_node(state: GraphState) -> dict:
-    """
-    Выводит критику пользователю и запрашивает его комментарии.
-    Работает только если HUMAN_IN_THE_LOOP_ENABLED = True.
-    """
-    print("\n--- NODE: Human in the Loop ---")
-
-    # Если режим отключен, просто пропускаем узел
-    if not HUMAN_IN_THE_LOOP_ENABLED:
-        print("-> HITL is disabled. Skipping.")
-        return {}
-
-    latest_hypotheses = state['hypotheses_and_critics'][-1]
-
-    for i, hyp in enumerate(latest_hypotheses):
-        status = "✅ Approved" if hyp.is_approved else "❌ Rejected"
-        print("\n" + "=" * 20 + f" HYPOTHESIS #{i + 1} REVIEW " + "=" * 20)
-        print(f"Hypothesis: {hyp.formulation}\n")
-        print(f"Synthesizer's Critique & Verdict: {status}\n---")
-
-        # Выводим краткое резюме критики
-        critique_text = hyp.critique.content if hasattr(hyp.critique, 'content') else hyp.critique
-        summary_match = re.search(r"General Summary:(.*?)Scores Summary:", critique_text, re.DOTALL | re.IGNORECASE)
-        if summary_match:
-            print(summary_match.group(1).strip())
-        else:
-            print(critique_text)  # Выводим все, если не нашли резюме
-
-        print("\n" + "=" * 60)
-
-        # Запрашиваем комментарий у пользователя
-        user_comment = input(f"Enter your comments/instructions for Hypothesis #{i + 1} (or press Enter to skip): ")
-
-        if user_comment.strip():
-            # Добавляем комментарий пользователя к существующей критике
-            user_feedback_block = f"\n\n<USER_COMMENT>\n{user_comment.strip()}\n</USER_COMMENT>"
-            hyp.critique += user_feedback_block
-            print("-> User feedback recorded.")
-
-    # Возвращаем обновленное состояние. Само состояние уже изменено по ссылке.
-    return {"hypotheses_and_critics": state['hypotheses_and_critics']}
-
 def end_node(state: GraphState) -> dict:
     """Финальный узел, который завершает работу и выводит итоговый отчет по гипотезам."""
     print("\n\n" + "=" * 40 + " FINAL REPORT " + "=" * 40)
@@ -158,7 +106,7 @@ def end_node(state: GraphState) -> dict:
                     year = f"20{match.group(1)}"
 
             citation_tag = f"[{first_author} et al., {year}]"
-            all_papers_by_tag[citation_tag] = paper  # Сохраняем всю информацию о статье
+            all_papers_by_tag[citation_tag] = paper # Сохраняем всю информацию о статье
     # --- END: LOGIC ---
 
     hypotheses_and_critics = state.get('hypotheses_and_critics')
@@ -192,7 +140,7 @@ def end_node(state: GraphState) -> dict:
         cited_tags = re.findall(r'(\[.*?et al\.,.*?\])', formulation_text)
         if cited_tags:
             print("\nCited Sources:")
-            unique_tags = sorted(list(set(cited_tags)))  # Удаляем дубликаты
+            unique_tags = sorted(list(set(cited_tags))) # Удаляем дубликаты
             for tag in unique_tags:
                 paper_data = all_papers_by_tag.get(tag)
                 if paper_data:
@@ -213,8 +161,7 @@ def end_node(state: GraphState) -> dict:
 
             # Fallback to older format if new one fails
             if not summary_match:
-                summary_match = re.search(r"Executive Summary:(.*?)Strengths:", critique_text,
-                                          re.DOTALL | re.IGNORECASE)
+                 summary_match = re.search(r"Executive Summary:(.*?)Strengths:", critique_text, re.DOTALL | re.IGNORECASE)
 
             if summary_match:
                 summary = summary_match.group(1).strip()
@@ -234,7 +181,8 @@ def end_node(state: GraphState) -> dict:
                     ).content
                     print(f"  - Recommendations: {translated_recommendations}")
                 except Exception:
-                    print(f"  - Recommendations: {recommendations}")
+                     print(f"  - Recommendations: {recommendations}")
+
 
     print("\n\n" + "=" * 94)
     return {}
@@ -264,17 +212,9 @@ def should_continue(state: GraphState) -> str:
         print(f"-> Refinement cycle limit reached ({MAX_REFINEMENT_CYCLES}). Ending with the current results.")
         return "end"
     else:
-        # MODIFIED: Возвращаем новый узел для HITL
-        print("-> Not all hypotheses are approved. Proceeding to Human-in-the-Loop review.")
-        return "human_in_the_loop"
+        print("-> Not all hypotheses are approved. Generating a refined search query based on critique.")
+        return "refine_and_search"
 
-def after_hitl_decision(state: GraphState) -> str:
-    """
-    Определяет, что делать после получения обратной связи от пользователя.
-    """
-    print("--- DECISION: After Human Input ---")
-    print("-> Generating a refined search query based on critique and user feedback.")
-    return "refine_and_search"
 
 # --- Сборка графа ---
 workflow = StateGraph(GraphState)
@@ -285,8 +225,6 @@ workflow.add_node("refine_search_query", refine_search_query_node)
 workflow.add_node("searcher", searcher_node)
 workflow.add_node("formulator", formulator_node)
 workflow.add_node("critics", critics_node)
-# NEW: Добавляем узел HITL
-workflow.add_node("human_in_the_loop", human_in_the_loop_node)
 workflow.add_node("end", end_node)
 
 # Входная точка - начальный поиск
@@ -297,27 +235,18 @@ workflow.add_edge("prepare_search", "searcher")
 workflow.add_edge("searcher", "formulator")
 workflow.add_edge("formulator", "critics")
 
-# MODIFIED: Условные переходы после критики
+# Новый край от уточняющего узла обратно к поисковику
+workflow.add_edge("refine_search_query", "searcher")
+
+# Условные переходы после критики
 workflow.add_conditional_edges(
     "critics",
     should_continue,
     {
-        "human_in_the_loop": "human_in_the_loop", # Новый путь к HITL
+        "refine_and_search": "refine_search_query",
         "end": "end"
     }
 )
-
-# NEW: Переход после узла HITL
-workflow.add_conditional_edges(
-    "human_in_the_loop",
-    after_hitl_decision,
-    {
-        "refine_and_search": "refine_search_query"
-    }
-)
-
-# Старый край от уточняющего узла обратно к поисковику
-workflow.add_edge("refine_search_query", "searcher")
 
 workflow.add_edge("end", END)
 
@@ -326,14 +255,8 @@ app = workflow.compile()
 
 # --- Запуск ---
 
-class PydanticEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, BaseModel):
-            return obj.model_dump()
-        return super().default(obj)
-
-
-async def main(query):
+async def main():
+    query = input("Введите ваш вопрос: ")
     print(1)
     prompt = f"You have been given a user request. Translate it into English. If it is already in English, simply duplicate the request. Don't write anything else, just the translation.\n\nUser request: {query}"
     translation = llm.invoke(prompt)
@@ -359,31 +282,13 @@ async def main(query):
         if event_type == 'on_chat_model_stream':
             print(event['data']['chunk'].content, end='')
         elif event_type == 'on_chain_start':
-            yield json.dumps({'type': 'agent_start', 'id': event['run_id'], 'parent_ids': event['parent_ids'], 'agent': agent})
-            print(f"\n<{agent} {event['run_id']}>\n")
-            await asyncio.sleep(0.2)
+            print(f"\n<{agent}>\n")
         elif event_type == 'on_chain_end':
-            yield json.dumps({'type': 'agent_end', 'agent': agent, 'id': event['run_id'], 'parent_ids': event['parent_ids'], 'result': event['data']}, cls=PydanticEncoder)
-            print(f"\n</{agent} {event['run_id']}>")
-            await asyncio.sleep(0.2)
-
-
-fastapi = FastAPI()
-
-fastapi.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
-
-
-@fastapi.get("/generate")
-async def generate(req: Request):
-    prompt = req.query_params["prompt"]
-    return EventSourceResponse(main(prompt))
+            print(f"\n</{agent}>")
 
 
 if __name__ == "__main__":
-    uvicorn.run(fastapi, host="0.0.0.0", port=8000)
+    start = time.time()
+    asyncio.run(main())
+    end = time.time()
+    print(f"\nTotal time: {end - start:.2f} seconds")

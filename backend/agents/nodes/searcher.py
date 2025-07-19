@@ -488,43 +488,39 @@ def prepare_final_report_node(state: GraphState) -> GraphState:
 # --- 5. СБОРКА И ЗАПУСК ГРАФА ---
 def compile_workflow():
     workflow = StateGraph(GraphState)
+    # Определяем все УЗЛЫ-ДЕЙСТВИЯ, которые обновляют состояние
     workflow.add_node("plan_search_queries", plan_search_queries_node)
     workflow.add_node("search_openalex", search_openalex_node)
     workflow.add_node("search_arxiv", search_arxiv_node)
     workflow.add_node("fetch_and_summarize", fetch_and_summarize_node)
     workflow.add_node("validate_summaries", validate_summaries_node)
-    workflow.add_node("decide_to_continue", decide_to_continue_node)
     workflow.add_node("prepare_final_report", prepare_final_report_node)
-
-    # NEW: Добавляем новый узел
     workflow.add_node("upload_articles", upload_articles_node)
-    # NEW: Добавляем новый узел принятия решений
-    workflow.add_node("after_upload_decision", after_upload_decision_node)
 
+    # Функции-маршрутизаторы (decide_to_continue_node, after_upload_decision_node)
+    # НЕ добавляются как узлы. Они используются только для определения условных переходов.
 
+    # Определяем поток выполнения графа
     workflow.set_entry_point("plan_search_queries")
     workflow.add_edge("plan_search_queries", "search_openalex")
     workflow.add_edge("search_openalex", "search_arxiv")
     workflow.add_edge("search_arxiv", "fetch_and_summarize")
     workflow.add_edge("fetch_and_summarize", "validate_summaries")
 
-    # MODIFIED: Условные переходы после валидации
+    # После валидации, `decide_to_continue_node` определяет следующий шаг
     workflow.add_conditional_edges(
         "validate_summaries",
         decide_to_continue_node,
         {
             "continue_search": "plan_search_queries",
             "prepare_report": "prepare_final_report",
-            "upload_articles": "upload_articles" # Новый путь
+            "upload_articles": "upload_articles"
         }
     )
 
-    # NEW: Переход от узла загрузки к новому узлу принятия решений
-    workflow.add_edge("upload_articles", "after_upload_decision")
-
-    # NEW: Условные переходы после нового узла принятия решений
+    # После ручной загрузки, `after_upload_decision_node` определяет следующий шаг
     workflow.add_conditional_edges(
-        "after_upload_decision",
+        "upload_articles",  # Источник - узел, который только что завершился
         after_upload_decision_node,
         {
             "continue_search": "plan_search_queries",
