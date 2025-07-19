@@ -5,8 +5,9 @@ import {CardContent, CardDescription, CardHeader, CardTitle} from "@/components/
 import {Badge} from "@/components/ui/badge";
 import {ComponentType} from "react";
 
-export default function DefaultNode({id, data}: { id: string, data: { title: string, description: string, dataComponent: ComponentType<{data: any}>, streamedData: any, isRunning?: boolean } }) {
+export default function DefaultNode({id, type, data}: { id: string, type: string, data: { title: string, description: string, dataComponent: ComponentType<{data: any}>, streamedData: any, isRunning?: boolean } }) {
     const isRunning = data.isRunning
+    console.log(type, data.dataComponent);
     return (
         <NodeStatusIndicator status={!isRunning ? "success" : "loading"}>
             <BaseNode className="nowheel">
@@ -14,7 +15,7 @@ export default function DefaultNode({id, data}: { id: string, data: { title: str
                 {!id.startsWith("end") && <Handle type="source" position={Position.Bottom}/>}
                 <CardHeader className="p-0 pb-2">
                     <CardTitle className="flex justify-between">
-                        <p>{data.title}</p>
+                        <p>{data.title} ({type})</p>
                         <Badge
                             variant={!isRunning ? "default" : "secondary"}>{!isRunning ? "Успешно!" : "Загрузка..."}</Badge>
                     </CardTitle>
@@ -22,7 +23,7 @@ export default function DefaultNode({id, data}: { id: string, data: { title: str
                         {data.description}
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="p-0">
+                <CardContent className="p-0 max-h-26 overflow-y-auto">
                     <data.dataComponent data={data.streamedData}/>
                 </CardContent>
             </BaseNode>

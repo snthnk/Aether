@@ -4,6 +4,11 @@ import {FlowContext} from "@/app/FlowChart";
 import {getLayoutedElements} from "@/app/dagre";
 import initialNodes from "@/app/chartElements/nodes";
 import {useReactFlow} from "@xyflow/react";
+import {Button} from "@/components/ui/button";
+
+// const Empty = ({data}) => (
+//     <Button onClick={()=>console.warn(data, JSON.stringify(data).length)}>log</Button>
+// )
 
 export default function StreamData() {
     const {data, setNodes, setEdges, nodes, edges, isConnected} = useContext(FlowContext)
@@ -21,9 +26,8 @@ export default function StreamData() {
 
         if (data.type === "agent_start") {
             const nodeToInsert = initialNodes.find(inode => inode.id === data.agent);
-            // const edgeToInsert = initialEdges.find(iedge => iedge.target === data.agent);
             const edgeToInsert = {
-                id: "asaff",
+                id: data.id,
                 source: nodes[nodes.length - 1].id,
                 target: data.agent,
             };
@@ -33,19 +37,18 @@ export default function StreamData() {
             const timestamp = Date.now();
             const newNode = {
                 ...nodeToInsert,
-                id: `${nodeToInsert.id}_${timestamp}`,
+                id: data.id,
                 type: data.agent,
                 isRunning: true,
-                dataComponent: nodeToInsert.dataComponent as ComponentType<{ data: any }>,
+                dataComponent: (nodeToInsert.dataComponent) as ComponentType<{ data: any }>,
+                // dataComponent: (nodeToInsert.dataComponent || Empty) as ComponentType<{ data: any }>,
+                // dataComponent: Empty as ComponentType<{ data: any }>,
                 streamedData: null,
             };
 
-            const sourceType = edgeToInsert.source;
-            // const sourceNode = [...nodes].reverse().find(n => n.type === sourceType) || nodes[0];
 
-            let newEdges = [];
+            let newEdges;
 
-            // If this is an 'end' node, connect it to all 'critics' nodes
             if (data.agent === 'end') {
                 const criticsNodes = nodes.filter(n => n.type === 'critics');
                 newEdges = criticsNodes.map(criticNode => ({
@@ -63,13 +66,13 @@ export default function StreamData() {
                 //     target: newNode.id,
                 //     animated: true
                 // }];
-                newEdges = [{
+                newEdges = (data.parent_ids as string[]).map(par_id => ({
                     ...edgeToInsert,
-                    id: `${edgeToInsert.id}_${timestamp}`,
-                    source: nodes[nodes.length - 1].id,
+                    id: `${par_id}_${edgeToInsert.id}_${timestamp}`,
+                    source: par_id,
                     target: newNode.id,
                     animated: true
-                }];
+                }));
             }
 
             const currentNodes = nodes.map(e => ({
@@ -78,7 +81,9 @@ export default function StreamData() {
                 title: e.data.title as string,
                 description: e.data.description as string,
                 isRunning: e.data.isRunning as boolean,
-                dataComponent: e.data.dataComponent as ComponentType<{ data: any }>,
+                // dataComponent: Empty as ComponentType<{ data: any }>,
+                dataComponent: ((e.data.dataComponent)) as ComponentType<{ data: any }>,
+                // dataComponent: ((e.data.dataComponent) || Empty) as ComponentType<{ data: any }>,
                 streamedData: e.data.streamedData
             }));
 
@@ -89,6 +94,8 @@ export default function StreamData() {
                 [...edges, ...newEdges]
             );
 
+            console.log(insertEdges);
+
             setNodes(insertNodes);
             setEdges(insertEdges);
 
@@ -96,9 +103,10 @@ export default function StreamData() {
         }
 
         if (data.type === "agent_end") {
+            console.log(nodes);
             setNodes(nodes =>
-                nodes.map((node, index) =>
-                    index === nodes.length - 1
+                nodes.map((node) =>
+                    node.id === data.id
                         ? {...node, data: {...node.data, streamedData: data.result, isRunning: false}}
                         : node
                 )

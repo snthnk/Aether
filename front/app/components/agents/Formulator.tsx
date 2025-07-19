@@ -1,21 +1,14 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 
-export default function Formulator({data}: { data: string | null }) {
+export default function Formulator({data}: { data: any }) {
     return (
-        <div className="flex gap-2 items-center">
-            {data ? (
-                <div>
-                    <p className="font-medium">Сформулирована гипотеза:</p>
-                    <div className="max-h-22 text-xs overflow-y-auto">
-                        <p>{data}</p>
-                    </div>
-                </div>
-            ) : (
-                <>
-                    <TextShimmerWave className='font-mono text-xs' duration={1}>
-                        Формулирую гипотезу...
-                    </TextShimmerWave>
-                </>
+        <div className="flex flex-col gap-2 items-center text-muted-foreground text-xs">
+            {data ? data.output.hypotheses_and_critics[data.output.hypotheses_and_critics.length-1].map(({formulation}: {formulation: string}, i) => (
+                <p key={i}><b>{i + 1}.</b> {formulation}</p>
+            )) : (
+                <TextShimmerWave className='font-mono' duration={1}>
+                    Формулирую гипотезы...
+                </TextShimmerWave>
             )}
         </div>
     )

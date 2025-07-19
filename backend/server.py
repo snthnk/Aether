@@ -68,11 +68,8 @@ nodes = [
 async def mock_astream_events(input_data, version="v2") -> AsyncGenerator[dict, None]:
     # Simulate each node emitting a start and end event
     for node in nodes:
-        await asyncio.sleep(1)  # simulate async delay
         yield {"event": "on_chain_start", "name": node["agent"]}
-        await asyncio.sleep(0.2)
         yield {"event": "on_chat_model_stream", "data": "some llm output"}
-        await asyncio.sleep(1)
         yield {"event": "on_chain_end", "name": node["agent"], "result": node["result"]}
 
 
