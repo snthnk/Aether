@@ -3,9 +3,9 @@ import {GitBranch} from "lucide-react";
 
 export default function Orchestrator() {
     return (
-        <div className="flex gap-2 items-center text-muted-foreground">
+        <div className="flex gap-2 items-center  ">
             <GitBranch/>
-            <TextShimmerWave className='font-mono text-xs' duration={1}>
+            <TextShimmerWave className='font-mono' duration={1}>
                 Распределяю задачи между агентами...
             </TextShimmerWave>
         </div>

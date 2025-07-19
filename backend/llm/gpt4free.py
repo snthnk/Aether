@@ -93,7 +93,6 @@ class GPT4Free(BaseChatModel):
                         yield ChatGenerationChunk(message=AIMessageChunk(content=delta.content))
                         last_chunk_yielded = True
                         # Добавляем небольшую задержку для лучшего стриминга
-                        await asyncio.sleep(0.01)
 
             # Добавляем перенос строки в конце сообщения
             if last_chunk_yielded:
@@ -111,7 +110,6 @@ class GPT4Free(BaseChatModel):
                     yield ChatGenerationChunk(message=AIMessageChunk(content=word))
                 else:
                     yield ChatGenerationChunk(message=AIMessageChunk(content=" " + word))
-                await asyncio.sleep(0.05)  # Small delay between words
             # Добавляем перенос строки в конце fallback сообщения
             yield ChatGenerationChunk(message=AIMessageChunk(content='\n'))
 

@@ -8,8 +8,8 @@ import {PromptField} from "@/app/components/PromptField";
 import initialNodes from "@/app/chartElements/nodes";
 import DefaultNode from "@/app/components/DefaultNode";
 import useSSE from "@/app/useSSE";
-import StreamData from "@/app/StreamData";
 import {toast} from "sonner";
+import StreamData from "@/app/StreamData";
 
 export const FlowContext = createContext<{
     nodes: Node[],
