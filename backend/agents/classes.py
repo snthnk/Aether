@@ -32,7 +32,8 @@ class GraphState(MessagesState):
     final_report: Optional[str]
     error: Optional[str]
     # search_cycles используется внутри поискового графа, поэтому его нужно оставить
-    search_cycles: int = 0
+    search_cycles: int
+    client_id: str
 
 
 class SearchQueryPlannerOutput(BaseModel):
@@ -73,13 +74,13 @@ def format_search_history(search_history: list[SearchRequest], limit: int = 5) -
         for paper in search.results:
             title = paper.get('title', 'N/A').strip()
             if title in seen_titles:
-                continue # Пропускаем дубликаты
+                continue  # Пропускаем дубликаты
             seen_titles.add(title)
 
             # Создаем более читаемый тег для цитирования
             # Пример: [Smith et al., 2021]
             authors_list = paper.get('authors', 'Unknown Author').split(',')
-            first_author = authors_list[0].split()[-1] # Фамилия первого автора
+            first_author = authors_list[0].split()[-1]  # Фамилия первого автора
             # Извлекаем год из источника, если возможно (упрощенная логика)
             source_link = paper.get('source', '')
             year = 'N/A'
@@ -96,7 +97,8 @@ def format_search_history(search_history: list[SearchRequest], limit: int = 5) -
                 f"### Source Article: {citation_tag}\n"
                 f"- Title: {title}\n"
                 f"- Link: {source_link}\n"
-                f"- Summary: {paper.get('summary', 'No summary available.').replace(chr(10), ' ')}\n" # Заменяем переносы строк на пробелы
+                f"- Summary: {paper.get('summary', 'No summary available.').replace(chr(10), ' ')}\n"
+                # Заменяем переносы строк на пробелы
             )
 
         if not papers_in_cycle:
@@ -105,7 +107,6 @@ def format_search_history(search_history: list[SearchRequest], limit: int = 5) -
             res_parts.extend(papers_in_cycle)
 
     return "\n".join(res_parts)
-
 
 
 def format_hypotheses_and_critics(hypotheses_and_critics: list[list[Hypothesis]], limit: int = 5) -> str:

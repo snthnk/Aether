@@ -7,13 +7,13 @@ import initialEdges from "@/app/chartElements/edges";
 import {useReactFlow} from "@xyflow/react";
 
 export default function StreamData() {
-    const {data, setNodes, setEdges, nodes, edges, isConnected} = useContext(FlowContext)
+    const {lastMessage, setNodes, setEdges, nodes, edges, isConnected} = useContext(FlowContext)
     const {fitView} = useReactFlow()
-    const formulatorIdRef = useRef<string|null>(null)
-    const criticsIdRef = useRef<string|null>(null)
+    const formulatorIdRef = useRef<string | null>(null)
+    const criticsIdRef = useRef<string | null>(null)
 
     useEffect(() => {
-        if (!data) {
+        if (!lastMessage) {
             setNodes(getLayoutedElements([{
                 ...initialNodes[0],
                 streamedData: null,
@@ -23,8 +23,15 @@ export default function StreamData() {
             return;
         }
 
-        if (data.type === "agent_start") {
-            const nodeToInsert = initialNodes.find(inode => inode.id === data.agent);
+        if (lastMessage.type === "critics_approval" && nodes[nodes.length - 1].type === "critics") {
+            setNodes(nds => nds.map((node, i) => i === nodes.length - 1 ? {
+                ...node,
+                data: {...node.data, streamedData: lastMessage}
+            } : node))
+        }
+
+        if (lastMessage.type === "agent_start") {
+            const nodeToInsert = initialNodes.find(inode => inode.id === lastMessage.agent);
 
             if (!nodeToInsert) return;
 
@@ -32,7 +39,7 @@ export default function StreamData() {
             let filteredNodes = nodes;
             let filteredEdges = edges;
 
-            if (data.agent === 'formulator') {
+            if (lastMessage.agent === 'formulator') {
                 if (formulatorIdRef.current) {
                     // Remove existing formulator node and its edges
                     filteredNodes = nodes.filter(node => node.id !== formulatorIdRef.current);
@@ -40,8 +47,8 @@ export default function StreamData() {
                         edge.source !== formulatorIdRef.current && edge.target !== formulatorIdRef.current
                     );
                 }
-                formulatorIdRef.current = data.id;
-            } else if (data.agent === 'critics') {
+                formulatorIdRef.current = lastMessage.id;
+            } else if (lastMessage.agent === 'critics') {
                 if (criticsIdRef.current) {
                     // Remove existing critics node and its edges
                     filteredNodes = nodes.filter(node => node.id !== criticsIdRef.current);
@@ -49,14 +56,14 @@ export default function StreamData() {
                         edge.source !== criticsIdRef.current && edge.target !== criticsIdRef.current
                     );
                 }
-                criticsIdRef.current = data.id;
+                criticsIdRef.current = lastMessage.id;
             }
 
             const timestamp = Date.now();
             const newNode = {
                 ...nodeToInsert,
-                id: data.id,
-                type: data.agent,
+                id: lastMessage.id,
+                type: lastMessage.agent,
                 isRunning: true,
                 dataComponent: (nodeToInsert.dataComponent) as ComponentType<{ data: any }>,
                 streamedData: null,
@@ -75,19 +82,19 @@ export default function StreamData() {
             // Find edges that should connect to this new node based on initialEdges
             // Special case for 'end' node - connect from most recent critics node
             let newEdges = initialEdges
-                .filter(edge => edge.target === data.agent)
+                .filter(edge => edge.target === lastMessage.agent)
                 .map(edge => {
                     // Find the most recent node ID that corresponds to the source type
                     const sourceNode = findMostRecentNodeByType(edge.source);
                     return sourceNode ? {
-                        id: `${edge.id}_${data.id}_${timestamp}`,
+                        id: `${edge.id}_${lastMessage.id}_${timestamp}`,
                         source: sourceNode.id,
-                        target: data.id,
+                        target: lastMessage.id,
                         animated: true
                     } : null;
                 })
                 .filter(edge => edge !== null);
-            if (data.agent === 'end') {
+            if (lastMessage.agent === 'end') {
                 const mostRecentCriticsNode = findMostRecentNodeByType('critics');
                 if (mostRecentCriticsNode) {
                     newEdges = [{
@@ -120,18 +127,18 @@ export default function StreamData() {
             fitView({duration: 500, nodes: insertNodes.slice(insertNodes.length - 2, insertNodes.length)});
         }
 
-        if (data.type === "agent_end") {
+        if (lastMessage.type === "agent_end") {
             setNodes(nodes =>
                 nodes.map((node) =>
-                    node.id === data.id
-                        ? {...node, data: {...node.data, streamedData: data.result, isRunning: false}}
+                    node.id === lastMessage.id
+                        ? {...node, data: {...node.data, streamedData: lastMessage.result, isRunning: false}}
                         : node
                 )
             );
             setEdges(e => e.map(edge => ({...edge, animated: false})));
             fitView({duration: 500, nodes: nodes.slice(nodes.length - 2, nodes.length)});
         }
-    }, [data, setEdges, setNodes]);
+    }, [lastMessage, setEdges, setNodes]);
 
     const [first, setFirst] = useState(false);
     useEffect(() => {

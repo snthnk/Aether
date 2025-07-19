@@ -1,4 +1,4 @@
-import {useContext, useState} from "react";
+import {useContext, useEffect, useState} from "react";
 import {Handle, Position} from "@xyflow/react";
 import {Textarea} from "@/components/ui/textarea";
 import {Button} from "@/components/ui/button";
@@ -11,7 +11,11 @@ import initialNodes from "@/app/chartElements/nodes";
 export const PromptField = () => {
     const [prompt, setPrompt] = useState("");
     const [activated, setActivated] = useState(false);
-    const {connect, isConnected, setNodes, setEdges} = useContext(FlowContext);
+    const {connect, sendMessage, isConnected, setNodes, setEdges} = useContext(FlowContext);
+    useEffect(() => {
+        if (!isConnected) return;
+        sendMessage(JSON.stringify({prompt}));
+    }, [isConnected, prompt]);
     return (
         <BaseNode className="flex flex-col gap-2 p-4">
             {activated && <Handle type="source" position={Position.Bottom} id="prompt"/>}
@@ -28,7 +32,7 @@ export const PromptField = () => {
                     setNodes(layoutedNodes);
                     setEdges([]);
                     setActivated(true);
-                    connect(`http://localhost:8000/events?${new URLSearchParams({prompt}).toString()}&no_delay=true`)
+                    connect(`http://localhost:8000/generate`)
                     // connect(`http://localhost:8000/generate?${new URLSearchParams({prompt}).toString()}`)
                 }}
                 disabled={isConnected}><Send/> Отправить</Button>

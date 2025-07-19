@@ -1,6 +1,8 @@
 import os
 import urllib
 import time
+from uuid import uuid4
+
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -18,8 +20,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
-from backend.agents.constants import MIN_VALIDATED_ARTICLES, MAX_SEARCH_CYCLES, MAX_ARTICLES_COUNT, MANUAL_ARTICLE_UPLOAD_ENABLED
+from backend.agents.constants import MIN_VALIDATED_ARTICLES, MAX_SEARCH_CYCLES, MAX_ARTICLES_COUNT, \
+    MANUAL_ARTICLE_UPLOAD_ENABLED
 from backend.agents.classes import SearchRequest, GraphState
+from backend.websocket_manager import manager
 
 
 def download_arxiv_html_article(article_id: str) -> Optional[str]:
@@ -79,7 +83,6 @@ def plan_search_queries_node(state: GraphState) -> GraphState:
         prompt = ChatPromptTemplate.from_template(SEARCH_QUERY_PLANNER_CREATIVE_PROMPT)
         llm_chain = prompt | llm_creative
 
-
     chain_input = {
         "query": state['current_search_request'].input_query,
         "previous_queries_str": "\n- ".join(previous_queries),
@@ -104,8 +107,6 @@ def plan_search_queries_node(state: GraphState) -> GraphState:
     state['search_cycles'] = cycle_count
 
     return state
-
-
 
 
 # ========================= УЗЛЫ ПОИСКА =========================
@@ -339,7 +340,7 @@ def validate_summaries_node(state: GraphState) -> GraphState:
 
 
 # NEW: Узел для загрузки и обработки статей от пользователя
-def upload_articles_node(state: GraphState) -> GraphState:
+async def upload_articles_node(state: GraphState) -> GraphState:
     """
     Предлагает пользователю загрузить свои PDF-файлы, извлекает из них текст,
     создает резюме и добавляет их в список валидированных статей.
@@ -354,23 +355,13 @@ def upload_articles_node(state: GraphState) -> GraphState:
     newly_summarized = []
 
     while True:
-        # Эта часть имитирует фронтенд. Пользователь вводит путь к файлу.
-        # На фронте это будет <input type="file">.
-        pdf_path = input("Укажите путь к PDF-файлу для добавления или нажмите Enter для продолжения: ").strip()
-
-        if not pdf_path:
-            break
-
-        if not os.path.exists(pdf_path) or not pdf_path.lower().endswith('.pdf'):
-            print("  [!] Файл не найден или не является PDF. Пожалуйста, попробуйте снова.")
-            continue
-
-        print(f"  [*] Обрабатываю файл: {pdf_path}")
         try:
-            # --- ЗАГОТОВКА ДЛЯ ФРОНТЕНДА ---
-            # На фронтенде вы получите байты файла, здесь мы их читаем с диска
-            with open(pdf_path, "rb") as f:
-                pdf_bytes = f.read()
+            # todo: add pdf_bytes
+            # pdf_bytes = await state['websocket'].receive_bytes()
+            pdf_bytes = await manager.get_ws(state['client_id']).receive_text() and None
+
+            if not pdf_bytes:
+                break
 
             # Извлечение текста из PDF
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
@@ -388,11 +379,10 @@ def upload_articles_node(state: GraphState) -> GraphState:
 
             # Формирование объекта статьи
             # Имя файла используется как заголовок, а путь - как источник
-            file_name = os.path.basename(pdf_path)
             manual_article = {
-                "title": f"User-Uploaded: {file_name}",
+                "title": f"User-Uploaded: {text_content[:100]}",
                 "authors": "Uploaded by User",
-                "source": f"local-file://{pdf_path}",
+                "source": f"uploaded://{uuid4()}",
                 "summary": summary_text
             }
             newly_summarized.append(manual_article)
@@ -533,13 +523,13 @@ def compile_workflow():
     return app
 
 
-def node_make_research(state: GraphState) -> Dict:
+async def node_make_research(state: GraphState) -> Dict:
     """
     Основной узел-обертка для поискового модуля.
     Запускает под-граф поиска и обновляет основное состояние.
     """
     # Запускаем под-граф поиска
-    final_report, request = make_research(state['current_search_request'].input_query, state)
+    final_report, request = await make_research(state['current_search_request'].input_query, state)
 
     # Возвращаем словарь для обновления состояния основного графа
     return {
@@ -552,7 +542,7 @@ def node_make_research(state: GraphState) -> Dict:
     }
 
 
-def make_research(query, state: GraphState) -> tuple[str, SearchRequest]:
+async def make_research(query, state: GraphState) -> tuple[str, SearchRequest]:
     # Устанавливаем начальное состояние для под-графа
     initial_search_state = state.copy()
     initial_search_state['current_search_request'] = SearchRequest(input_query=query)
@@ -564,7 +554,7 @@ def make_research(query, state: GraphState) -> tuple[str, SearchRequest]:
     final_state_data = None
     recursion_limit = (MAX_SEARCH_CYCLES * 5) + 5
 
-    for event in app.stream(initial_search_state, config={"recursion_limit": recursion_limit}):
+    async for event in app.astream(initial_search_state, config={"recursion_limit": recursion_limit}):
         for node_name, state_update in event.items():
             # Обновляем состояние основного графа результатами из под-графа
             for key, value in state_update.items():

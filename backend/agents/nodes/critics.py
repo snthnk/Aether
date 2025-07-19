@@ -15,6 +15,7 @@ from backend.agents.prompts import (
 from backend.agents.classes import GraphState
 from backend.agents.constants import SURGICAL_SEARCH_FETCH_COUNT, SURGICAL_SEARCH_SELECT_COUNT, \
     HUMAN_IN_THE_LOOP_ENABLED
+from backend.websocket_manager import manager
 
 
 # --- Pydantic models for structured output ---
@@ -242,9 +243,18 @@ async def _critique_logic(state: GraphState) -> dict:
             print(f"\n[Формулировка]:\n{formulation_text}")
             print(f"\n[Сводная критика от ИИ]:\n{critique_text}")
 
+            websocket = manager.get_ws(state['client_id'])
+            await websocket.send_json({
+                "type": "critics_approval",
+                "formulation": formulation_text,
+                "critique": critique_text
+            })
+
             # Запрашиваем комментарий пользователя
-            user_comment = input(
-                f"\n> Ваш комментарий для гипотезы #{i + 1} (нажмите Enter, чтобы пропустить): ").strip()
+            # user_comment = input(
+            #     f"\n> Ваш комментарий для гипотезы #{i + 1} (нажмите Enter, чтобы пропустить): ").strip()
+
+            user_comment = await websocket.receive_text()
 
             if user_comment:
                 # Добавляем комментарий пользователя в специальном формате, который поймет Формулятор

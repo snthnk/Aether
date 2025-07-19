@@ -1,5 +1,15 @@
 import asyncio
+import json
+from pprint import pprint
+from uuid import uuid4
+
+import uvicorn
+from fastapi import FastAPI, WebSocket
 from langgraph.graph import StateGraph, END
+from pydantic import BaseModel
+from sse_starlette import EventSourceResponse
+from starlette.middleware.cors import CORSMiddleware
+
 from backend.agents.classes import GraphState, Hypothesis, SearchRequest
 from backend.agents.nodes.formulator import formulator_node
 from backend.agents.nodes.critics import _critique_logic as critics_node
@@ -10,6 +20,8 @@ from backend.agents.constants import MAX_REFINEMENT_CYCLES
 from backend.agents.prompts import REFINE_SEARCH_PROMPT
 from langchain_core.prompts import ChatPromptTemplate
 import re
+
+from backend.websocket_manager import manager
 
 
 # --- Вспомогательная функция для форматирования критики ---
@@ -57,6 +69,7 @@ def prepare_search_node(state: GraphState) -> dict:
         "current_search_request": SearchRequest(input_query=query),
         "search_cycles": 0,
     }
+
 
 def refine_search_query_node(state: GraphState) -> dict:
     """
@@ -106,7 +119,7 @@ def end_node(state: GraphState) -> dict:
                     year = f"20{match.group(1)}"
 
             citation_tag = f"[{first_author} et al., {year}]"
-            all_papers_by_tag[citation_tag] = paper # Сохраняем всю информацию о статье
+            all_papers_by_tag[citation_tag] = paper  # Сохраняем всю информацию о статье
     # --- END: LOGIC ---
 
     hypotheses_and_critics = state.get('hypotheses_and_critics')
@@ -140,7 +153,7 @@ def end_node(state: GraphState) -> dict:
         cited_tags = re.findall(r'(\[.*?et al\.,.*?\])', formulation_text)
         if cited_tags:
             print("\nCited Sources:")
-            unique_tags = sorted(list(set(cited_tags))) # Удаляем дубликаты
+            unique_tags = sorted(list(set(cited_tags)))  # Удаляем дубликаты
             for tag in unique_tags:
                 paper_data = all_papers_by_tag.get(tag)
                 if paper_data:
@@ -161,7 +174,8 @@ def end_node(state: GraphState) -> dict:
 
             # Fallback to older format if new one fails
             if not summary_match:
-                 summary_match = re.search(r"Executive Summary:(.*?)Strengths:", critique_text, re.DOTALL | re.IGNORECASE)
+                summary_match = re.search(r"Executive Summary:(.*?)Strengths:", critique_text,
+                                          re.DOTALL | re.IGNORECASE)
 
             if summary_match:
                 summary = summary_match.group(1).strip()
@@ -181,8 +195,7 @@ def end_node(state: GraphState) -> dict:
                     ).content
                     print(f"  - Recommendations: {translated_recommendations}")
                 except Exception:
-                     print(f"  - Recommendations: {recommendations}")
-
+                    print(f"  - Recommendations: {recommendations}")
 
     print("\n\n" + "=" * 94)
     return {}
@@ -253,19 +266,24 @@ workflow.add_edge("end", END)
 app = workflow.compile()
 
 
+class PydanticEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, BaseModel):
+            return obj.model_dump()
+        return super().default(obj)
+
+
 # --- Запуск ---
 
-async def main():
-    query = input("Введите ваш вопрос: ")
-    print(1)
+async def main(query, websocket: WebSocket, client_id: str):
     prompt = f"You have been given a user request. Translate it into English. If it is already in English, simply duplicate the request. Don't write anything else, just the translation.\n\nUser request: {query}"
     translation = llm.invoke(prompt)
-    print(2)
 
     user_question = str(translation.content).strip()
 
     inputs = {
         "user_question": user_question,
+        "client_id": client_id,
         "search_history": [],
         "hypotheses_and_critics": [],
         "papers": [],
@@ -282,13 +300,39 @@ async def main():
         if event_type == 'on_chat_model_stream':
             print(event['data']['chunk'].content, end='')
         elif event_type == 'on_chain_start':
-            print(f"\n<{agent}>\n")
+            await websocket.send_json(
+                {'type': 'agent_start', 'id': event['run_id'], 'parent_ids': event['parent_ids'], 'agent': agent})
+            print(f"\n<{agent} {event['run_id']}>\n")
+            await asyncio.sleep(0.2)
         elif event_type == 'on_chain_end':
-            print(f"\n</{agent}>")
+            pprint(event)
+            await websocket.send_text(json.dumps(
+                {'type': 'agent_end', 'agent': agent, 'id': event['run_id'], 'parent_ids': event['parent_ids'],
+                 'result': event['data']}, cls=PydanticEncoder))
+            print(f"\n</{agent} {event['run_id']}>")
+            await asyncio.sleep(0.2)
+
+
+fastapi = FastAPI()
+
+fastapi.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+
+@fastapi.websocket("/generate")
+async def generate(websocket: WebSocket):
+    client_id = uuid4().hex
+    await manager.connect(websocket, client_id)
+    data = await websocket.receive_json()
+    await main(data["prompt"], websocket, client_id)
+    print(f"{' closing ':=^75}")
+    await websocket.close()
 
 
 if __name__ == "__main__":
-    start = time.time()
-    asyncio.run(main())
-    end = time.time()
-    print(f"\nTotal time: {end - start:.2f} seconds")
+    uvicorn.run(fastapi, host="0.0.0.0", port=8000)

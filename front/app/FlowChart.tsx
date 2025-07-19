@@ -7,22 +7,23 @@ import {createContext, Dispatch, SetStateAction} from "react";
 import {PromptField} from "@/app/components/PromptField";
 import initialNodes from "@/app/chartElements/nodes";
 import DefaultNode from "@/app/components/DefaultNode";
-import useSSE from "@/app/useSSE";
 import {toast} from "sonner";
 import StreamData from "@/app/StreamData";
+import useWebSocket from "@/app/useWebSocket";
 
 export const FlowContext = createContext<{
     nodes: Node[],
     edges: Edge[],
-    data: Record<string, string> | null,
+    lastMessage: Record<string, string> | null,
     setNodes: Dispatch<SetStateAction<Node[]>>,
     setEdges: Dispatch<SetStateAction<Edge[]>>,
     isConnected: boolean,
     connect: (prompt: string) => void,
+    sendMessage: (data: string) => void,
 }>({
     nodes: [],
     edges: [],
-    data: null,
+    lastMessage: null,
     setNodes: () => {
     },
     setEdges: () => {
@@ -30,19 +31,21 @@ export const FlowContext = createContext<{
     isConnected: false,
     connect: () => {
     },
+    sendMessage: () => {
+    }
 })
 
 export default function FlowChart() {
     const [nodes, setNodes] = useNodesState<Node>([]);
     const [edges, setEdges] = useEdgesState<Edge>([]);
 
-    const {connect, data, isConnected} = useSSE({
+    const {connect, lastMessage, isConnected, sendMessage} = useWebSocket({
         onError: () => nodes.length === 1 && toast.error("Ошибка подключения к серверу.", {richColors: true})
     });
 
     return (
         <FlowContext.Provider value={{
-            nodes, edges, data, setNodes, setEdges, isConnected, connect
+            nodes, edges, lastMessage, setNodes, setEdges, isConnected, connect, sendMessage
         }}>
             <ReactFlow
                 proOptions={{hideAttribution: true}}

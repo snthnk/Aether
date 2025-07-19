@@ -10,6 +10,7 @@ import Summaries from "@/app/components/agents/Summaries";
 import ValidatedSummaries from "@/app/components/agents/ValidatedSummaries";
 import SearchReport from "@/app/components/agents/SearchReport";
 import PrepareSearch from "@/app/components/agents/PrepareSearch";
+import UploadArticles from "@/app/components/agents/UploadArticles";
 
 const Empty = ()=>null
 
@@ -103,6 +104,12 @@ const initialNodes = [
         title: "Уточнение запроса",
         description: "Уточняет поисковый запрос на основе анализа.",
         dataComponent: Empty
+    },
+    {
+        id: "upload_articles",
+        title: "Загрузка документов",
+        description: "Загрузите свои статьи, чтобы уточнить контекст Формулировщику",
+        dataComponent: UploadArticles
     }
 ]
 
