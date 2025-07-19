@@ -6,7 +6,7 @@ from backend.agents.nodes.critics import _critique_logic as critics_node
 from backend.agents.nodes.searcher import node_make_research as searcher_node
 from backend.llm.llms import llm
 import time
-from backend.agents.constants import MAX_REFINEMENT_CYCLES
+from backend.agents.constants import MAX_REFINEMENT_CYCLES, HUMAN_IN_THE_LOOP_ENABLED
 from backend.agents.prompts import REFINE_SEARCH_PROMPT
 from langchain_core.prompts import ChatPromptTemplate
 import re
@@ -83,6 +83,48 @@ def refine_search_query_node(state: GraphState) -> dict:
         "search_cycles": 0,
     }
 
+
+def human_in_the_loop_node(state: GraphState) -> dict:
+    """
+    Выводит критику пользователю и запрашивает его комментарии.
+    Работает только если HUMAN_IN_THE_LOOP_ENABLED = True.
+    """
+    print("\n--- NODE: Human in the Loop ---")
+
+    # Если режим отключен, просто пропускаем узел
+    if not HUMAN_IN_THE_LOOP_ENABLED:
+        print("-> HITL is disabled. Skipping.")
+        return {}
+
+    latest_hypotheses = state['hypotheses_and_critics'][-1]
+
+    for i, hyp in enumerate(latest_hypotheses):
+        status = "✅ Approved" if hyp.is_approved else "❌ Rejected"
+        print("\n" + "=" * 20 + f" HYPOTHESIS #{i + 1} REVIEW " + "=" * 20)
+        print(f"Hypothesis: {hyp.formulation}\n")
+        print(f"Synthesizer's Critique & Verdict: {status}\n---")
+
+        # Выводим краткое резюме критики
+        critique_text = hyp.critique.content if hasattr(hyp.critique, 'content') else hyp.critique
+        summary_match = re.search(r"General Summary:(.*?)Scores Summary:", critique_text, re.DOTALL | re.IGNORECASE)
+        if summary_match:
+            print(summary_match.group(1).strip())
+        else:
+            print(critique_text)  # Выводим все, если не нашли резюме
+
+        print("\n" + "=" * 60)
+
+        # Запрашиваем комментарий у пользователя
+        user_comment = input(f"Enter your comments/instructions for Hypothesis #{i + 1} (or press Enter to skip): ")
+
+        if user_comment.strip():
+            # Добавляем комментарий пользователя к существующей критике
+            user_feedback_block = f"\n\n<USER_COMMENT>\n{user_comment.strip()}\n</USER_COMMENT>"
+            hyp.critique += user_feedback_block
+            print("-> User feedback recorded.")
+
+    # Возвращаем обновленное состояние. Само состояние уже изменено по ссылке.
+    return {"hypotheses_and_critics": state['hypotheses_and_critics']}
 
 def end_node(state: GraphState) -> dict:
     """Финальный узел, который завершает работу и выводит итоговый отчет по гипотезам."""
@@ -212,9 +254,17 @@ def should_continue(state: GraphState) -> str:
         print(f"-> Refinement cycle limit reached ({MAX_REFINEMENT_CYCLES}). Ending with the current results.")
         return "end"
     else:
-        print("-> Not all hypotheses are approved. Generating a refined search query based on critique.")
-        return "refine_and_search"
+        # MODIFIED: Возвращаем новый узел для HITL
+        print("-> Not all hypotheses are approved. Proceeding to Human-in-the-Loop review.")
+        return "human_in_the_loop"
 
+def after_hitl_decision(state: GraphState) -> str:
+    """
+    Определяет, что делать после получения обратной связи от пользователя.
+    """
+    print("--- DECISION: After Human Input ---")
+    print("-> Generating a refined search query based on critique and user feedback.")
+    return "refine_and_search"
 
 # --- Сборка графа ---
 workflow = StateGraph(GraphState)
@@ -225,6 +275,8 @@ workflow.add_node("refine_search_query", refine_search_query_node)
 workflow.add_node("searcher", searcher_node)
 workflow.add_node("formulator", formulator_node)
 workflow.add_node("critics", critics_node)
+# NEW: Добавляем узел HITL
+workflow.add_node("human_in_the_loop", human_in_the_loop_node)
 workflow.add_node("end", end_node)
 
 # Входная точка - начальный поиск
@@ -235,18 +287,27 @@ workflow.add_edge("prepare_search", "searcher")
 workflow.add_edge("searcher", "formulator")
 workflow.add_edge("formulator", "critics")
 
-# Новый край от уточняющего узла обратно к поисковику
-workflow.add_edge("refine_search_query", "searcher")
-
-# Условные переходы после критики
+# MODIFIED: Условные переходы после критики
 workflow.add_conditional_edges(
     "critics",
     should_continue,
     {
-        "refine_and_search": "refine_search_query",
+        "human_in_the_loop": "human_in_the_loop", # Новый путь к HITL
         "end": "end"
     }
 )
+
+# NEW: Переход после узла HITL
+workflow.add_conditional_edges(
+    "human_in_the_loop",
+    after_hitl_decision,
+    {
+        "refine_and_search": "refine_search_query"
+    }
+)
+
+# Старый край от уточняющего узла обратно к поисковику
+workflow.add_edge("refine_search_query", "searcher")
 
 workflow.add_edge("end", END)
 

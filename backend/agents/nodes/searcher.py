@@ -18,7 +18,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
-from backend.agents.constants import MIN_VALIDATED_ARTICLES, MAX_SEARCH_CYCLES, MAX_ARTICLES_COUNT
+from backend.agents.constants import MIN_VALIDATED_ARTICLES, MAX_SEARCH_CYCLES, MAX_ARTICLES_COUNT, MANUAL_ARTICLE_UPLOAD_ENABLED
 from backend.agents.classes import SearchRequest, GraphState
 
 
@@ -338,13 +338,91 @@ def validate_summaries_node(state: GraphState) -> GraphState:
     return state
 
 
+# NEW: Узел для загрузки и обработки статей от пользователя
+def upload_articles_node(state: GraphState) -> GraphState:
+    """
+    Предлагает пользователю загрузить свои PDF-файлы, извлекает из них текст,
+    создает резюме и добавляет их в список валидированных статей.
+    Работает только если MANUAL_ARTICLE_UPLOAD_ENABLED = True.
+    """
+    print("\n--- 📥 АГЕНТ РУЧНОЙ ЗАГРУЗКИ ---")
+    if not MANUAL_ARTICLE_UPLOAD_ENABLED:
+        print("-> Ручная загрузка статей отключена. Пропускаю.")
+        return state
+
+    summarizer_chain = ChatPromptTemplate.from_template(SEARCH_SUMMARIZER_PROMPT) | llm
+    newly_summarized = []
+
+    while True:
+        # Эта часть имитирует фронтенд. Пользователь вводит путь к файлу.
+        # На фронте это будет <input type="file">.
+        pdf_path = input("Укажите путь к PDF-файлу для добавления или нажмите Enter для продолжения: ").strip()
+
+        if not pdf_path:
+            break
+
+        if not os.path.exists(pdf_path) or not pdf_path.lower().endswith('.pdf'):
+            print("  [!] Файл не найден или не является PDF. Пожалуйста, попробуйте снова.")
+            continue
+
+        print(f"  [*] Обрабатываю файл: {pdf_path}")
+        try:
+            # --- ЗАГОТОВКА ДЛЯ ФРОНТЕНДА ---
+            # На фронтенде вы получите байты файла, здесь мы их читаем с диска
+            with open(pdf_path, "rb") as f:
+                pdf_bytes = f.read()
+
+            # Извлечение текста из PDF
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                text_content = "".join(page.get_text() for page in doc).strip()
+            # ---------------------------------
+
+            if not text_content:
+                print("  [!] Не удалось извлечь текст из PDF.")
+                continue
+
+            print("    [*] Текст успешно извлечен. Создаю резюме...")
+            # Создание резюме
+            llm_response = summarizer_chain.invoke({"paper_text": text_content})
+            summary_text = llm_response.content
+
+            # Формирование объекта статьи
+            # Имя файла используется как заголовок, а путь - как источник
+            file_name = os.path.basename(pdf_path)
+            manual_article = {
+                "title": f"User-Uploaded: {file_name}",
+                "authors": "Uploaded by User",
+                "source": f"local-file://{pdf_path}",
+                "summary": summary_text
+            }
+            newly_summarized.append(manual_article)
+            print("    [+] Резюме успешно создано и добавлено в список.")
+
+        except Exception as e:
+            print(f"  [!] Ошибка при обработке файла: {e}")
+
+    if newly_summarized:
+        # Добавляем новые резюме к уже валидированным статьям
+        state['validated_summaries'].extend(newly_summarized)
+        print(f"\n  [+] Добавлено {len(newly_summarized)} статей от пользователя.")
+        print(f"  [i] Всего релевантных статей теперь: {len(state['validated_summaries'])}")
+
+    return state
+
+
 # ========================= УЗЕЛ ПРИНЯТИЯ РЕШЕНИЙ =========================
+# MODIFIED: Немного изменяем логику, чтобы она вела на новый узел
 def decide_to_continue_node(state: GraphState) -> str:
     print("\n--- 🤔 АГЕНТ-РЕШАТЕЛЬ: АНАЛИЗИРУЮ РЕЗУЛЬТАТЫ ---")
     validated_count = len(state['validated_summaries'])
     cycle_count = state['search_cycles']
     print(f"  [i] Найдено релевантных статей: {validated_count} (цель: {MIN_VALIDATED_ARTICLES})")
     print(f"  [i] Прошло циклов поиска: {cycle_count} (лимит: {MAX_SEARCH_CYCLES})")
+
+    # NEW: Если включена ручная загрузка, всегда переходим к этому шагу
+    if MANUAL_ARTICLE_UPLOAD_ENABLED:
+        print("  [*] Перехожу к шагу ручной загрузки статей.")
+        return "upload_articles"
 
     if validated_count >= MIN_VALIDATED_ARTICLES:
         print("  [+] Достаточно статей найдено. Перехожу к формированию отчета.")
@@ -354,6 +432,25 @@ def decide_to_continue_node(state: GraphState) -> str:
         return "prepare_report"
     else:
         print("  [!] Найдено мало релевантных статей. Запускаю новый цикл поиска.")
+        return "continue_search"
+
+
+# NEW: Узел принятия решений ПОСЛЕ ручной загрузки
+def after_upload_decision_node(state: GraphState) -> str:
+    print("\n--- 🤔 АГЕНТ-РЕШАТЕЛЬ (ПОСЛЕ ЗАГРУЗКИ): АНАЛИЗИРУЮ ИТОГИ ---")
+    validated_count = len(state['validated_summaries'])
+    cycle_count = state['search_cycles']
+    print(f"  [i] Всего релевантных статей (с учетом загруженных): {validated_count} (цель: {MIN_VALIDATED_ARTICLES})")
+    print(f"  [i] Прошло циклов поиска: {cycle_count} (лимит: {MAX_SEARCH_CYCLES})")
+
+    if validated_count >= MIN_VALIDATED_ARTICLES:
+        print("  [+] Достаточно статей найдено. Перехожу к формированию отчета.")
+        return "prepare_report"
+    if cycle_count >= MAX_SEARCH_CYCLES:
+        print("  [!] Достигнут лимит циклов поиска. Перехожу к формированию отчета с тем, что есть.")
+        return "prepare_report"
+    else:
+        print("  [!] Даже с учетом загруженных, статей мало. Запускаю новый цикл поиска.")
         return "continue_search"
 
 
@@ -399,16 +496,42 @@ def compile_workflow():
     workflow.add_node("decide_to_continue", decide_to_continue_node)
     workflow.add_node("prepare_final_report", prepare_final_report_node)
 
+    # NEW: Добавляем новый узел
+    workflow.add_node("upload_articles", upload_articles_node)
+    # NEW: Добавляем новый узел принятия решений
+    workflow.add_node("after_upload_decision", after_upload_decision_node)
+
+
     workflow.set_entry_point("plan_search_queries")
     workflow.add_edge("plan_search_queries", "search_openalex")
     workflow.add_edge("search_openalex", "search_arxiv")
     workflow.add_edge("search_arxiv", "fetch_and_summarize")
     workflow.add_edge("fetch_and_summarize", "validate_summaries")
+
+    # MODIFIED: Условные переходы после валидации
     workflow.add_conditional_edges(
         "validate_summaries",
         decide_to_continue_node,
-        {"continue_search": "plan_search_queries", "prepare_report": "prepare_final_report"}
+        {
+            "continue_search": "plan_search_queries",
+            "prepare_report": "prepare_final_report",
+            "upload_articles": "upload_articles" # Новый путь
+        }
     )
+
+    # NEW: Переход от узла загрузки к новому узлу принятия решений
+    workflow.add_edge("upload_articles", "after_upload_decision")
+
+    # NEW: Условные переходы после нового узла принятия решений
+    workflow.add_conditional_edges(
+        "after_upload_decision",
+        after_upload_decision_node,
+        {
+            "continue_search": "plan_search_queries",
+            "prepare_report": "prepare_final_report"
+        }
+    )
+
     workflow.add_edge("prepare_final_report", END)
     app = workflow.compile()
     return app

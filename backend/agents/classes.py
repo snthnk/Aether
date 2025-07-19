@@ -48,7 +48,7 @@ class SearchQueryPlannerOutput(BaseModel):
 class HypothesesList(BaseModel):
     """Pydantic model for the output of the hypothesis formulator."""
     hypotheses: List[str] = Field(
-        description="List of 2-3 innovative hypotheses based on the user question and provided search results."
+        description="List of 2-3 innovative hypotheses with potential implementations based on the user question and provided search results."
     )
 
 
