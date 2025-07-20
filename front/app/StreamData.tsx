@@ -124,7 +124,7 @@ export default function StreamData() {
             setNodes(insertNodes);
             setEdges(insertEdges);
 
-            fitView({duration: 500, nodes: insertNodes.slice(insertNodes.length - 2, insertNodes.length)});
+            fitView({duration: 500, nodes: [nodes[nodes.length - 1]], padding: 1.5});
         }
 
         if (lastMessage.type === "agent_end") {
@@ -136,7 +136,7 @@ export default function StreamData() {
                 )
             );
             setEdges(e => e.map(edge => ({...edge, animated: false})));
-            fitView({duration: 500, nodes: nodes.slice(nodes.length - 2, nodes.length)});
+            fitView({duration: 500, nodes: [nodes[nodes.length - 1]], padding: 1.5});
         }
     }, [lastMessage, setEdges, setNodes]);
 
@@ -146,7 +146,7 @@ export default function StreamData() {
             setFirst(true)
             return;
         }
-        fitView({duration: 500, nodes})
+        fitView({duration: 500, nodes: [nodes[nodes.length - 1]], padding: 2});
     }, [fitView, isConnected]);
 
     return null

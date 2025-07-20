@@ -1,6 +1,7 @@
 const initialEdges = [
     // Main flow from user request
     {id: 'prompt-formulator', source: 'prompt', target: 'formulator'},
+    {id: 'prompt-prepare', source: 'prompt', target: 'prepare_search'},
     {id: 'formulator-critics', source: 'formulator', target: 'critics'},
 
     // Critics to search block
@@ -13,9 +14,8 @@ const initialEdges = [
     {id: "so-fs", source: "search_openalex", target: "fetch_and_summarize"},
     {id: "sa-fs", source: "search_arxiv", target: "fetch_and_summarize"},
     {id: "fs-vs", source: "fetch_and_summarize", target: "validate_summaries"},
-
-    // Loop back for continued search
-    {id: "vs-psq", source: "validate_summaries", target: "plan_search_queries"},
+    {id: "fs-vs", source: "validate_summaries", target: "upload_articles"},
+    {id: "fs-vs", source: "upload_articles", target: "plan_search_queries"},
 
     // When search is complete - go to report preparation
     {id: "vs-pfr", source: "validate_summaries", target: "prepare_final_report"},

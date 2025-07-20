@@ -1,6 +1,16 @@
 'use client'
 
-import {Background, Controls, Edge, MarkerType, Node, ReactFlow, useEdgesState, useNodesState} from '@xyflow/react';
+import {
+    Background,
+    BackgroundVariant,
+    Controls,
+    Edge,
+    MarkerType,
+    Node,
+    ReactFlow,
+    useEdgesState,
+    useNodesState
+} from '@xyflow/react';
 
 import '@xyflow/react/dist/style.css';
 import {createContext, Dispatch, SetStateAction} from "react";
@@ -64,7 +74,7 @@ export default function FlowChart() {
                     prompt: PromptField,
                 }}
                 fitView>
-                <Background/>
+                <Background variant={BackgroundVariant.Cross} color={"rgba(77,158,70,0.14)"} />
                 <Controls/>
                 <StreamData/>
             </ReactFlow>

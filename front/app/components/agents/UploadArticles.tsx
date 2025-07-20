@@ -1,6 +1,6 @@
 import {Button} from "@/components/ui/button";
-import {useContext, useState} from "react";
-import {Play, SkipForward, Upload} from "lucide-react";
+import {useContext, useEffect, useState} from "react";
+import {Send, SkipForward, Upload} from "lucide-react";
 import {FlowContext} from "@/app/FlowChart";
 import {
     FileUpload,
@@ -9,108 +9,160 @@ import {
     FileUploadItemDelete,
     FileUploadItemMetadata,
     FileUploadItemPreview,
+    FileUploadItemProgress,
     FileUploadList,
     FileUploadTrigger
 } from "@/components/ui/file-upload";
+import {toast} from "sonner";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger
+} from "@/components/ui/dialog";
 
 export default function UploadArticles() {
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
     const {sendMessage} = useContext(FlowContext);
 
-    const handleFilesChange = (files: File[]) => {
-        setUploadedFiles(files);
-    };
+    const [uploadedFilesData, setUploadedFilesData] = useState<{ uuid: string, name: string }[]>([]);
 
-    // const handleContinue = async () => {
-    //     if (uploadedFiles.length > 0) {
-    //         // Convert files to binary data
-    //         const filesData = await Promise.all(
-    //             uploadedFiles.map(async (file) => {
-    //                 const arrayBuffer = await file.arrayBuffer();
-    //                 return {
-    //                     name: file.name,
-    //                     type: file.type,
-    //                     size: file.size,
-    //                     data: new Uint8Array(arrayBuffer)
-    //                 };
-    //             })
-    //         );
-    //
-    //         sendMessage({
-    //             type: 'files',
-    //             files: filesData
-    //         });
-    //     } else {
-    //         // Skip - send empty message or handle skip logic
-    //         sendMessage({
-    //             type: 'skip'
-    //         });
-    //     }
-    // };
+    const [disabled, setDisabled] = useState(false);
 
+    useEffect(() => {
+        setUploadedFilesData(prevData =>
+            prevData.filter(fileData =>
+                uploadedFiles.some(file => file.name === fileData.name)
+            )
+        );
+    }, [uploadedFiles]);
     return (
-        <div className="flex flex-col w-full gap-4 items-center">
-            <p className="font-medium">Загрузите свои файлы!</p>
-            <FileUpload
-                multiple
-                accept=".pdf,.doc,.docx,.txt,.md"
-                maxFiles={10}
-                maxSize={10 * 1024 * 1024} // 10MB
-                onValueChange={handleFilesChange}
-                className="w-full max-w-md"
-            >
-                <FileUploadDropzone className="w-full">
-                    <div className="flex flex-col items-center gap-2">
-                        <Upload className="h-8 w-8 text-muted-foreground"/>
-                        <div className="text-center">
-                            <p className="text-sm font-medium">
-                                Перетащите файлы сюда или нажмите для выбора
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                                Поддерживаются: PDF, DOC, DOCX, TXT, MD (до 10MB)
-                            </p>
+        <div className="grid grid-cols-2 gap-2 w-full mt-2">
+            <Dialog>
+                <DialogTrigger asChild>
+                    <Button disabled={disabled}><Upload/> Загрузить</Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Загрузка документов
+                        </DialogTitle>
+                        <DialogDescription>
+                            Загрузите свои статьи, чтобы уточнить контекст Формулировщику
+                        </DialogDescription>
+                    </DialogHeader>
+                    <FileUpload
+                        multiple
+                        accept=".pdf"
+                        maxFiles={10}
+                        maxSize={100 * 1024 * 1024} // 10MB
+                        value={uploadedFiles}
+                        onValueChange={setUploadedFiles}
+                        onUpload={async (
+                            files: File[],
+                            {onProgress, onSuccess}
+                        ) => {
+                            try {
+                                for (const file of files) {
+                                    const formData = new FormData()
+                                    formData.append("file", file)
+
+                                    await new Promise<any>((resolve, reject) => {
+                                        const xhr = new XMLHttpRequest()
+
+                                        xhr.upload.onprogress = (e) => {
+                                            if (e.lengthComputable) {
+                                                const progress = (e.loaded / e.total) * 100
+                                                onProgress(file, progress)
+                                            }
+                                        }
+
+                                        xhr.onload = () => {
+                                            if (xhr.status >= 200 && xhr.status < 300) {
+                                                const responseData = JSON.parse(xhr.responseText);
+                                                onSuccess(file)
+
+                                                setUploadedFilesData(prev => [...prev, {
+                                                    uuid: responseData.uuid,
+                                                    name: file.name
+                                                }]);
+
+                                                resolve(responseData)
+                                            } else {
+                                                reject(new Error(`Upload failed: ${xhr.status}`))
+                                            }
+                                        }
+
+                                        xhr.onerror = () => reject(new Error('Upload failed'))
+
+                                        xhr.open('POST', 'http://localhost:8000/upload')
+                                        xhr.send(formData)
+                                    })
+                                }
+                            } catch (error) {
+                                toast.error("Ошибка загрузки файла", {richColors: true})
+                                console.error(error)
+                            }
+                        }}
+                        className="w-full"
+                    >
+                        <FileUploadDropzone className="w-full">
+                            <div className="flex flex-col items-center gap-2">
+                                <Upload className="h-8 w-8 text-muted-foreground"/>
+                                <div className="text-center">
+                                    <p className="text-sm font-medium">
+                                        Перетащите файлы сюда или нажмите для выбора
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Поддерживаются: .pdf (до 100MB)
+                                    </p>
+                                </div>
+                                <FileUploadTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                        Выберите файлы
+                                    </Button>
+                                </FileUploadTrigger>
+                            </div>
+                        </FileUploadDropzone>
+
+                        <FileUploadList className="max-h-40 overflow-y-auto">
+                            {uploadedFiles.map((file) => (
+                                <FileUploadItem key={file.name} value={file}>
+                                    <FileUploadItemPreview/>
+                                    <FileUploadItemMetadata/>
+                                    <FileUploadItemDelete asChild>
+                                        <Button variant="ghost" size="sm">
+                                            ×
+                                        </Button>
+                                    </FileUploadItemDelete>
+                                    <FileUploadItemProgress/>
+                                </FileUploadItem>
+                            ))}
+                        </FileUploadList>
+                    </FileUpload>
+
+                    {uploadedFiles.length > 0 && (
+                        <div className="text-sm text-muted-foreground">
+                            Загружено файлов: {uploadedFiles.length}
                         </div>
-                        <FileUploadTrigger asChild>
-                            <Button variant="outline" size="sm">
-                                Выберите файлы
-                            </Button>
-                        </FileUploadTrigger>
-                    </div>
-                </FileUploadDropzone>
-
-                <FileUploadList className="max-h-40 overflow-y-auto">
-                    {uploadedFiles.map((file) => (
-                        <FileUploadItem key={file.name} value={file}>
-                            <FileUploadItemPreview/>
-                            <FileUploadItemMetadata/>
-                            <FileUploadItemDelete asChild>
-                                <Button variant="ghost" size="sm">
-                                    ×
-                                </Button>
-                            </FileUploadItemDelete>
-                        </FileUploadItem>
-                    ))}
-                </FileUploadList>
-            </FileUpload>
-
-            {uploadedFiles.length > 0 && (
-                <div className="text-sm text-muted-foreground">
-                    Загружено файлов: {uploadedFiles.length}
-                </div>
-            )}
-
-            <Button
-                variant={uploadedFiles.length ? "default" : "secondary"}
-                // onClick={handleContinue}
-                onClick={() => sendMessage("")}
-                className="w-full max-w-md"
-            >
-                {uploadedFiles.length ? (
-                    <><Play className="mr-2 h-4 w-4"/> Продолжить</>
-                ) : (
-                    <><SkipForward className="mr-2 h-4 w-4"/> Пропустить</>
-                )}
-            </Button>
+                    )}
+                    <Button disabled={disabled || uploadedFiles.length === 0} onClick={() => {
+                        setDisabled(true);
+                        sendMessage(JSON.stringify({
+                            type: 'upload_files',
+                            files: uploadedFilesData
+                        }));
+                    }}><Send/> Отправить</Button>
+                </DialogContent>
+            </Dialog>
+            <Button variant="secondary" disabled={disabled} onClick={() => {
+                setDisabled(true)
+                sendMessage(JSON.stringify({
+                    type: 'skip_upload'
+                }))
+            }}><SkipForward/> Пропустить</Button>
         </div>
     );
 }

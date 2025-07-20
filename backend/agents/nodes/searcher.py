@@ -352,19 +352,16 @@ async def upload_articles_node(state: GraphState) -> GraphState:
         return state
 
     summarizer_chain = ChatPromptTemplate.from_template(SEARCH_SUMMARIZER_PROMPT) | llm
+
+    pdf_list = await manager.get_ws(state['client_id']).receive_json()
+    if pdf_list["type"] == "skip_upload":
+        return state
+
     newly_summarized = []
-
-    while True:
+    for pdf in pdf_list:
         try:
-            # todo: add pdf_bytes
-            # pdf_bytes = await state['websocket'].receive_bytes()
-            pdf_bytes = await manager.get_ws(state['client_id']).receive_text() and None
-
-            if not pdf_bytes:
-                break
-
             # Извлечение текста из PDF
-            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            with fitz.open(f"uploads/{pdf.id}.pdf", filetype="pdf") as doc:
                 text_content = "".join(page.get_text() for page in doc).strip()
             # ---------------------------------
 
@@ -380,9 +377,9 @@ async def upload_articles_node(state: GraphState) -> GraphState:
             # Формирование объекта статьи
             # Имя файла используется как заголовок, а путь - как источник
             manual_article = {
-                "title": f"User-Uploaded: {text_content[:100]}",
-                "authors": "Uploaded by User",
-                "source": f"uploaded://{uuid4()}",
+                "title": f"User-Uploaded: {pdf['name']}",
+                "authors": "Загружено Пользователем",
+                "source": f"uploaded://{pdf['id']}",
                 "summary": summary_text
             }
             newly_summarized.append(manual_article)
@@ -391,11 +388,9 @@ async def upload_articles_node(state: GraphState) -> GraphState:
         except Exception as e:
             print(f"  [!] Ошибка при обработке файла: {e}")
 
-    if newly_summarized:
-        # Добавляем новые резюме к уже валидированным статьям
-        state['validated_summaries'].extend(newly_summarized)
-        print(f"\n  [+] Добавлено {len(newly_summarized)} статей от пользователя.")
-        print(f"  [i] Всего релевантных статей теперь: {len(state['validated_summaries'])}")
+    state['validated_summaries'].extend(newly_summarized)
+    print(f"\n  [+] Добавлено {len(newly_summarized)} статей от пользователя.")
+    print(f"  [i] Всего релевантных статей теперь: {len(state['validated_summaries'])}")
 
     return state
 

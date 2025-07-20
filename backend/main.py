@@ -1,13 +1,15 @@
 import asyncio
 import json
+from pathlib import Path
 from pprint import pprint
 from uuid import uuid4
 
+import aiofiles
 import uvicorn
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Request, UploadFile, HTTPException, File, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel
-from sse_starlette import EventSourceResponse
 from starlette.middleware.cors import CORSMiddleware
 
 from backend.agents.classes import GraphState, Hypothesis, SearchRequest
@@ -15,7 +17,6 @@ from backend.agents.nodes.formulator import formulator_node
 from backend.agents.nodes.critics import _critique_logic as critics_node
 from backend.agents.nodes.searcher import node_make_research as searcher_node
 from backend.llm.llms import llm
-import time
 from backend.agents.constants import MAX_REFINEMENT_CYCLES
 from backend.agents.prompts import REFINE_SEARCH_PROMPT
 from langchain_core.prompts import ChatPromptTemplate
@@ -292,25 +293,35 @@ async def main(query, websocket: WebSocket, client_id: str):
         "search_cycles": 0
     }
 
-    async for event in app.astream_events(inputs, version="v2"):
-        event_type = event.get('event', None)
-        agent = event.get('name', '')
-        if agent in ["_write", "RunnableSequence", "__start__", "__end__", "LangGraph"]:
-            continue
-        if event_type == 'on_chat_model_stream':
-            print(event['data']['chunk'].content, end='')
-        elif event_type == 'on_chain_start':
-            await websocket.send_json(
-                {'type': 'agent_start', 'id': event['run_id'], 'parent_ids': event['parent_ids'], 'agent': agent})
-            print(f"\n<{agent} {event['run_id']}>\n")
-            await asyncio.sleep(0.2)
-        elif event_type == 'on_chain_end':
-            pprint(event)
-            await websocket.send_text(json.dumps(
-                {'type': 'agent_end', 'agent': agent, 'id': event['run_id'], 'parent_ids': event['parent_ids'],
-                 'result': event['data']}, cls=PydanticEncoder))
-            print(f"\n</{agent} {event['run_id']}>")
-            await asyncio.sleep(0.2)
+    try:
+        async for event in app.astream_events(inputs, version="v2"):
+            # Early exit if WebSocket disconnected
+            if websocket.client_state != WebSocketState.CONNECTED:
+                print("WebSocket disconnected, stopping stream")
+                break
+
+            event_type = event.get('event', None)
+            agent = event.get('name', '')
+            if agent in ["_write", "RunnableSequence", "__start__", "__end__", "LangGraph"]:
+                continue
+            if event_type == 'on_chat_model_stream':
+                print(event['data']['chunk'].content, end='')
+            elif event_type == 'on_chain_start':
+                await websocket.send_json(
+                    {'type': 'agent_start', 'id': event['run_id'], 'parent_ids': event['parent_ids'], 'agent': agent})
+                print(f"\n<{agent} {event['run_id']}>\n")
+                await asyncio.sleep(0.2)
+            elif event_type == 'on_chain_end':
+                pprint(event)
+                await websocket.send_text(json.dumps(
+                    {'type': 'agent_end', 'agent': agent, 'id': event['run_id'], 'parent_ids': event['parent_ids'],
+                     'result': event['data']}, cls=PydanticEncoder))
+                print(f"\n</{agent} {event['run_id']}>")
+                await asyncio.sleep(0.2)
+    except WebSocketDisconnect:
+        print("WebSocket disconnected during streaming")
+    except Exception as e:
+        print(f"Error during streaming: {e}")
 
 
 fastapi = FastAPI()
@@ -328,10 +339,55 @@ fastapi.add_middleware(
 async def generate(websocket: WebSocket):
     client_id = uuid4().hex
     await manager.connect(websocket, client_id)
-    data = await websocket.receive_json()
-    await main(data["prompt"], websocket, client_id)
-    print(f"{' closing ':=^75}")
-    await websocket.close()
+    try:
+        data = await websocket.receive_json()
+        await main(data["prompt"], websocket, client_id)
+    except WebSocketDisconnect:
+        print("WebSocket disconnected")
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        print(f"{' closing ':=^75}")
+        if websocket.client_state == WebSocketState.CONNECTED:
+            try:
+                await websocket.close()
+            except Exception as e:
+                print(f"Error closing WebSocket: {e}")
+
+
+@fastapi.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    try:
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No file selected")
+
+        if file.content_type != "application/pdf":
+            raise HTTPException(status_code=400, detail="File type not allowed")
+
+        max_size = 100 * 1024 * 1024
+        contents = await file.read()
+        if len(contents) > max_size:
+            raise HTTPException(status_code=400, detail="File too large")
+
+        await file.seek(0)
+
+        unique_filename = f"{uuid4()}"
+
+        upload_dir = Path("uploads")
+        upload_dir.mkdir(exist_ok=True)
+
+        file_path = upload_dir / f"{unique_filename}.pdf"
+        async with aiofiles.open(file_path, 'wb') as f:
+            await f.write(contents)
+
+        return {
+            "uuid": unique_filename,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    finally:
+        await file.close()
 
 
 if __name__ == "__main__":

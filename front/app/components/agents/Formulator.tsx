@@ -5,7 +5,7 @@ import {DataType} from "@/app/components/agents/types";
 
 export default function Formulator({data}: { data: DataType }) {
     return (
-        <div className="flex flex-col gap-2 items-center">
+        <div className="flex flex-col gap-2 justify-center">
             {data ? (
                 <div className="space-y-4">
                     {data.output.hypotheses_and_critics[data.output.hypotheses_and_critics.length - 1].map(({formulation}: {

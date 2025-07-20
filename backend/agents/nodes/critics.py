@@ -246,6 +246,7 @@ async def _critique_logic(state: GraphState) -> dict:
             websocket = manager.get_ws(state['client_id'])
             await websocket.send_json({
                 "type": "critics_approval",
+                "hyp_index": i,
                 "formulation": formulation_text,
                 "critique": critique_text
             })

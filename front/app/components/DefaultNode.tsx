@@ -13,6 +13,8 @@ import {
     DialogTrigger
 } from "@/components/ui/dialog";
 
+const DISABLED_DIALOG_TYPES = ["upload_articles", "prompt", "critics"];
+
 function DefaultNode({id, type, data}: {
     id: string,
     type: string,
@@ -25,6 +27,7 @@ function DefaultNode({id, type, data}: {
     }
 }) {
     const isRunning = data.isRunning
+    const dialogDisabled = type === "critics" ? !(data.streamedData && data.streamedData.output) : DISABLED_DIALOG_TYPES.includes(type);
     return (
         <NodeStatusIndicator status={!isRunning ? "success" : "loading"}>
             <BaseNode className="nowheel">
@@ -40,24 +43,30 @@ function DefaultNode({id, type, data}: {
                         {data.description}
                     </CardDescription>
                 </CardHeader>
-                <Dialog>
-                    <DialogTrigger asChild>
-                        <CardContent className="p-0 text-xs max-h-28 overflow-y-auto cursor-pointer">
-                            <data.dataComponent data={data.streamedData}/>
-                        </CardContent>
-                    </DialogTrigger>
-                    <DialogContent className="text-base max-h-[calc(100dvh-2rem)] max-w-2xl! overflow-y-auto">
-                        <DialogHeader>
-                            <DialogTitle>
-                                {data.title}
-                            </DialogTitle>
-                            <DialogDescription>
-                                {data.description}
-                            </DialogDescription>
-                        </DialogHeader>
+                {dialogDisabled ? (
+                    <CardContent className="p-0 text-xs max-h-28 overflow-y-auto cursor-pointer">
                         <data.dataComponent data={data.streamedData}/>
-                    </DialogContent>
-                </Dialog>
+                    </CardContent>
+                ) : (
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <CardContent className="p-0 text-xs max-h-28 overflow-y-auto cursor-pointer">
+                                <data.dataComponent data={data.streamedData}/>
+                            </CardContent>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>
+                                    {data.title}
+                                </DialogTitle>
+                                <DialogDescription>
+                                    {data.description}
+                                </DialogDescription>
+                            </DialogHeader>
+                            <data.dataComponent data={data.streamedData}/>
+                        </DialogContent>
+                    </Dialog>
+                )}
             </BaseNode>
         </NodeStatusIndicator>
     );

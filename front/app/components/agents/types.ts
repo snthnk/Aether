@@ -8,6 +8,7 @@ export interface Hypothesis {
     formulation: string;
     critique: string;
     is_approved: boolean;
+    hyp_index: number;
 }
 
 interface GraphState {

@@ -28,7 +28,7 @@ export default function Summaries({data}: { data: DataType }) {
                 <>
                     <Package className="size-4"/>
                     <TextShimmerWave className='font-mono' duration={1}>
-                        Ищу статьи в arXiv...
+                        Суммаризирую статьи...
                     </TextShimmerWave>
                 </>
             )}
