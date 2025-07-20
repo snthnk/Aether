@@ -15,6 +15,7 @@ export const PromptField = () => {
     useEffect(() => {
         if (!isConnected) return;
         sendMessage(JSON.stringify({prompt}));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isConnected, prompt]);
     return (
         <BaseNode className="flex flex-col gap-2 p-4">

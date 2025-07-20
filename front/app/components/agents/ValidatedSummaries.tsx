@@ -1,8 +1,9 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import {ListChecks} from "lucide-react";
 import {Badge} from "@/components/ui/badge";
+import {DataType} from "@/app/components/agents/types";
 
-export default function ValidatedSummaries({data}: { data: any }) {
+export default function ValidatedSummaries({data}: { data: DataType }) {
     return (
         <div className="flex gap-2 items-center text-muted-foreground">
             {data ? (

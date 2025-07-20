@@ -14,8 +14,9 @@ import MarkdownRenderer from "@/components/ui/markdown-renderer";
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import {useContext, useState} from "react";
 import {FlowContext} from "@/app/FlowChart";
+import {DataType, Hypothesis} from "@/app/components/agents/types";
 
-export default function Critic({data}: { data: any }) {
+export default function Critic({data}: { data: DataType }) {
     const {sendMessage} = useContext(FlowContext)
     if (!data) return (
         <div className="flex gap-2 items-center">
@@ -27,15 +28,13 @@ export default function Critic({data}: { data: any }) {
     );
     return (
         <div className="flex flex-col gap-2">
-            {data.output ? data.output.hypotheses_and_critics[data.output.hypotheses_and_critics.length - 1].map(({critique}: {
-                critique: string
-            }, i) => (
+            {data.output ? data.output.hypotheses_and_critics[data.output.hypotheses_and_critics.length - 1].map(({critique}, i) => (
                 <MarkdownRenderer key={i}>{critique}</MarkdownRenderer>
             )) : (
                 <>
                     <p className="font-medium text-base">Доступен комментарий!</p>
                     <div className="flex w-full gap-2">
-                        <CommentDialog data={data}/>
+                        <CommentDialog data={data as unknown as Hypothesis}/>
                         <Button variant="secondary" onClick={() => sendMessage("")}><SkipForward/> Пропустить</Button>
                     </div>
                 </>
@@ -44,7 +43,7 @@ export default function Critic({data}: { data: any }) {
     )
 }
 
-function CommentDialog({data}: { data: any }) {
+function CommentDialog({data}: { data: Hypothesis }) {
     const [comment, setComment] = useState("");
     const [open, setOpen] = useState(false);
     const {sendMessage} = useContext(FlowContext)

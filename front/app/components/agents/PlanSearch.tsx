@@ -1,10 +1,11 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import {Search} from "lucide-react";
+import {DataType} from "@/app/components/agents/types";
 
-export default function PlanSearch({data}: { data: any }) {
+export default function PlanSearch({data}: { data: DataType }) {
     return (
         <div className="text-muted-foreground flex flex-wrap gap-1">
-            {data ? data.output.current_search_request.search_queries.map((query, i) => (
+            {data && data.output.current_search_request ? data.output.current_search_request.search_queries.map((query, i) => (
                 <div className="bg-muted flex items-center gap-1 p-1 font-semibold rounded-full text-[0.75em]" key={i}>
                     <Search className="size-3"/> {query}
                 </div>

@@ -1,8 +1,9 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import MarkdownRenderer from "@/components/ui/markdown-renderer";
 import {Badge} from "@/components/ui/badge";
+import {DataType} from "@/app/components/agents/types";
 
-export default function Formulator({data}: { data: any }) {
+export default function Formulator({data}: { data: DataType }) {
     return (
         <div className="flex flex-col gap-2 items-center">
             {data ? (

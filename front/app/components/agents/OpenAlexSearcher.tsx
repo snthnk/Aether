@@ -1,7 +1,8 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import {Search} from "lucide-react";
+import {DataType} from "@/app/components/agents/types";
 
-export default function OpenAlexSearcher({data}: { data: any }) {
+export default function OpenAlexSearcher({data}: { data: DataType }) {
     return (
         <div className="flex items-center gap-2 text-muted-foreground">
             {data ? (

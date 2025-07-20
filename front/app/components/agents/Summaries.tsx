@@ -1,7 +1,8 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import {Package} from "lucide-react";
+import {DataType} from "@/app/components/agents/types";
 
-export default function Summaries({data}: { data: any }) {
+export default function Summaries({data}: { data: DataType }) {
     return (
         <div className="flex gap-2 items-center text-muted-foreground">
             {data ? (

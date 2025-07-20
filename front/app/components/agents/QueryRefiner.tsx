@@ -1,7 +1,8 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import {BadgeQuestionMark} from "lucide-react";
+import {DataType} from "@/app/components/agents/types";
 
-export default function QueryRefiner({data}: { data: any }) {
+export default function QueryRefiner({data}: { data: DataType }) {
     return (
         <div className="flex gap-2 items-center  ">
             <BadgeQuestionMark className="size-4"/>

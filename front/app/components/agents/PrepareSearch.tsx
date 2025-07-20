@@ -1,12 +1,13 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import {Search} from "lucide-react";
+import {DataType} from "@/app/components/agents/types";
 
-export default function PrepareSearch({data}: { data: any }) {
+export default function PrepareSearch({data}: { data: DataType }) {
     return (
         <div>
             {data ? (
                 <p>
-                    <b>Запрос поиска:</b> {data.output.current_search_request.input_query}
+                    <b>Запрос поиска:</b> {data.output.current_search_request?.input_query}
                 </p>
             ) : (
                 <div className="flex gap-2 items-center">
