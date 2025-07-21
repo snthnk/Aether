@@ -134,6 +134,8 @@ def end_node(state: GraphState) -> dict:
     print(f"\nSummary of the final iteration (Version {len(hypotheses_and_critics)}):")
     print("-" * 30)
 
+    hyp_output = []
+
     for i, hyp in enumerate(final_hypotheses_version):
         status = "✅ Approved" if hyp.is_approved else "❌ Rejected"
         print(f"\n--- Hypothesis #{i + 1}: {status} ---")
@@ -149,8 +151,8 @@ def end_node(state: GraphState) -> dict:
 
         print(f"Formulation: {translated_formulation}")
 
-        # --- START: LOGIC TO PRINT CITED SOURCES ---
-        # 3. Находим все теги цитирования в тексте формулировки гипотезы
+        tags = []
+
         cited_tags = re.findall(r'(\[.*?et al\.,.*?\])', formulation_text)
         if cited_tags:
             print("\nCited Sources:")
@@ -161,9 +163,21 @@ def end_node(state: GraphState) -> dict:
                     title = paper_data.get('title', 'Unknown Title')
                     link = paper_data.get('source', '#')
                     print(f"  - {tag}: {title}\n    Link: {link}")
+                    tags.append({
+                        "tag": tag,
+                        "title": title,
+                        "link": link,
+                    })
                 else:
                     print(f"  - {tag}: (Source information not found in history)")
+                    tags.append({
+                        "tag": tag,
+                        "title": "(Источник не найден)",
+                        "link": None,
+                    })
         # --- END: LOGIC ---
+
+        critique_obj = {}
 
         if hyp.critique:
             print("\nCritique Summary:")
@@ -184,9 +198,11 @@ def end_node(state: GraphState) -> dict:
                     translated_summary = llm.invoke(
                         f"Translate the following executive summary into Russian, keeping key technical terms and names in English. Provide only the translation.\n\nText: {summary}"
                     ).content
-                    print(f"  - Summary: {translated_summary}")
                 except Exception:
-                    print(f"  - Summary: {summary}")
+                    translated_summary = summary
+
+                print(f"  - Summary: {translated_summary}")
+                critique_obj["summary"] = translated_summary
 
             if recommendations_match:
                 recommendations = recommendations_match.group(1).strip()
@@ -194,12 +210,17 @@ def end_node(state: GraphState) -> dict:
                     translated_recommendations = llm.invoke(
                         f"Translate the following actionable recommendations into Russian, keeping key technical terms and names in English. Provide only the translation.\n\nText: {recommendations}"
                     ).content
-                    print(f"  - Recommendations: {translated_recommendations}")
                 except Exception:
-                    print(f"  - Recommendations: {recommendations}")
+                    translated_recommendations = recommendations
+                print(f"  - Recommendations: {translated_recommendations}")
+                critique_obj["recommendations"] = translated_recommendations
+
+        hyp_output.append({"hypothesis": translated_formulation, "is_approved": hyp.is_approved, "critique": critique_obj, "tags": tags})
 
     print("\n\n" + "=" * 94)
-    return {}
+    return {
+        "hypotheses": hyp_output,
+    }
 
 
 # --- Логика маршрутизации ---

@@ -22,7 +22,7 @@ export const PromptField = () => {
     const disabled = isConnected || prompt.length === 0;
     return (
         <BaseNode className="flex flex-col gap-2 p-4">
-            {activated && <Handle type="source" position={Position.Bottom} id="prompt"/>}
+            {activated && <Handle type="source" isConnectable={false} position={Position.Bottom} id="prompt"/>}
             <CardHeader className="p-0 pb-2">
                 <CardTitle>
                     Введите запрос

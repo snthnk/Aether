@@ -12,6 +12,7 @@ import {
     DialogTitle,
     DialogTrigger
 } from "@/components/ui/dialog";
+import {Expand} from "lucide-react";
 
 const DISABLED_DIALOG_TYPES = ["upload_articles", "prompt", "critics"];
 
@@ -31,8 +32,8 @@ function DefaultNode({id, type, data}: {
     return (
         <NodeStatusIndicator status={!isRunning ? "success" : "loading"}>
             <BaseNode className="nowheel">
-                <Handle type="target" position={Position.Top}/>
-                {!id.startsWith("end") && <Handle type="source" position={Position.Bottom}/>}
+                <Handle type="target" isConnectable={false} position={Position.Top}/>
+                {!id.startsWith("end") && <Handle type="source" isConnectable={false} position={Position.Bottom}/>}
                 <CardHeader className="p-0 pb-2">
                     <CardTitle className="flex gap-2 items-center justify-between">
                         <p>{data.title} ({type})</p>
@@ -50,8 +51,11 @@ function DefaultNode({id, type, data}: {
                 ) : (
                     <Dialog>
                         <DialogTrigger asChild>
-                            <CardContent className="p-0 text-xs max-h-28 overflow-y-auto cursor-pointer">
+                            <CardContent className="p-1 relative text-xs max-h-28 overflow-y-auto cursor-pointer">
                                 <data.dataComponent data={data.streamedData}/>
+                                <div className="absolute top-0 left-0 w-full h-full flex gap-2 items-center justify-center opacity-0 hover:opacity-100 hover:bg-black/50 transition-all text-white font-semibold text-xl rounded-sm">
+                                    <Expand/> Расширить
+                                </div>
                             </CardContent>
                         </DialogTrigger>
                         <DialogContent>

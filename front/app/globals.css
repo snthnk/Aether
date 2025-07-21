@@ -118,3 +118,7 @@
     @apply bg-background text-foreground;
   }
 }
+
+.react-flow__handle {
+  @apply size-2 ! bg-white! border-1! border-muted-foreground!
+}

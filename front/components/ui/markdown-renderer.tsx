@@ -145,7 +145,9 @@ const COMPONENTS = {
   h4: withClass("h4", "font-semibold text-base"),
   h5: withClass("h5", "font-medium"),
   strong: withClass("strong", "font-semibold"),
-  a: withClass("a", "text-primary underline underline-offset-2"),
+  a: ({...props}: any)=> {
+    return <a className="text-muted-foreground bg-muted py-1 px-2 text-[0.75em] font-medium rounded-full" target="_blank" {...props} />
+  },
   blockquote: withClass("blockquote", "border-l-2 border-primary pl-4"),
   code: ({ children, className, ...rest }: any) => {
     const match = /language-(\w+)/.exec(className || "")

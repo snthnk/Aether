@@ -18,7 +18,7 @@ export const getLayoutedElements = (nodes: {
     dagreGraph.setGraph({rankdir: 'TB'});
 
     nodes.forEach((node) => {
-        dagreGraph.setNode(node.id, {width: nodeWidth, height: nodeHeight});
+        dagreGraph.setNode(node.id, {width: nodeWidth, height: node.id !== "prompt" ? nodeHeight : 300});
     });
 
     edges.forEach((edge) => {
