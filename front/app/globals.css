@@ -120,5 +120,5 @@
 }
 
 .react-flow__handle {
-  @apply size-2 ! bg-white! border-1! border-muted-foreground!
+  @apply size-2! bg-white! border-1! border-muted-foreground!
 }

@@ -2,8 +2,7 @@ import type {Metadata} from "next";
 import {Geist, Geist_Mono} from "next/font/google";
 import "./globals.css";
 import {Toaster} from "@/components/ui/sonner";
-import Image from "next/image";
-import aiScienceImage from './ai_science.png'
+import Logo from "@/app/Logo";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -30,7 +29,7 @@ export default function RootLayout({
         <body
             className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
-        <Image src={aiScienceImage} alt={"AI Science"} className="fixed top-0 right-0 h-16 w-auto m-2 z-50" />
+        <Logo/>
         {children}
         <Toaster />
         </body>

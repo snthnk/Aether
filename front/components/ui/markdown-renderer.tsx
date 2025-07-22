@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm"
 
 import { cn } from "@/lib/utils"
 import { CopyButton } from "@/components/ui/copy-button"
+import {Globe} from "lucide-react";
 
 interface MarkdownRendererProps {
   children: string
@@ -145,8 +146,10 @@ const COMPONENTS = {
   h4: withClass("h4", "font-semibold text-base"),
   h5: withClass("h5", "font-medium"),
   strong: withClass("strong", "font-semibold"),
-  a: ({...props}: any)=> {
-    return <a className="text-muted-foreground bg-muted py-1 px-2 text-[0.75em] font-medium rounded-full" target="_blank" {...props} />
+  a: ({children, ...props}: any)=> {
+    return <a className="text-muted-foreground bg-muted py-1 px-2 text-[0.75em] inline-flex items-center gap-2 font-medium rounded-full" target="_blank" {...props}>
+      <Globe className="size-[0.875em]" /> {children}
+    </a>
   },
   blockquote: withClass("blockquote", "border-l-2 border-primary pl-4"),
   code: ({ children, className, ...rest }: any) => {

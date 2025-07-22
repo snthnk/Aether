@@ -19,7 +19,7 @@ export default function ArxivSearcher({data}: { data: DataType }) {
                                 href={paper.id}
                                 target="_blank"
                                 key={i}>
-                                {paper.title.slice(0, 20)+"..."}
+                                {paper.title ? paper.title.slice(0, 20) + "..." : "Заголовок отсутствует"}
                             </a>
                         ))}
                     </div>
