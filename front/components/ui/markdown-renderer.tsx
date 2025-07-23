@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm"
 
 import { cn } from "@/lib/utils"
 import { CopyButton } from "@/components/ui/copy-button"
-import {Globe} from "lucide-react";
+import Image from "next/image";
 
 interface MarkdownRendererProps {
   children: string
@@ -147,9 +147,14 @@ const COMPONENTS = {
   h5: withClass("h5", "font-medium"),
   strong: withClass("strong", "font-semibold"),
   a: ({children, ...props}: any)=> {
-    return <a className="text-muted-foreground bg-muted py-1 px-2 text-[0.75em] inline-flex items-center gap-2 font-medium rounded-full" target="_blank" {...props}>
-      <Globe className="size-[0.875em]" /> {children}
+    return (
+        <a className="text-muted-foreground bg-muted py-1 px-2 text-[0.75em] inline-flex items-center gap-1 font-medium rounded-full" target="_blank" {...props}>
+          <Image unoptimized className="size-4" width={30} height={30} src={`https://www.google.com/s2/favicons?domain=${new URL(props.href).hostname}&sz=64`} alt="Cant load image" />
+
+
+          {children}
     </a>
+    )
   },
   blockquote: withClass("blockquote", "border-l-2 border-primary pl-4"),
   code: ({ children, className, ...rest }: any) => {

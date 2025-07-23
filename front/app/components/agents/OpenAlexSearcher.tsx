@@ -1,6 +1,7 @@
 import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import {Search} from "lucide-react";
 import {DataType} from "@/app/components/agents/types";
+import Image from "next/image";
 
 export default function OpenAlexSearcher({data}: { data: DataType }) {
     return (
@@ -19,6 +20,7 @@ export default function OpenAlexSearcher({data}: { data: DataType }) {
                                 href={paper.id}
                                 target="_blank"
                                 key={i}>
+                                <Image unoptimized className="size-4" width={30} height={30} src={`https://www.google.com/s2/favicons?domain=${new URL(paper.id).hostname}&sz=64`} alt={paper.title} />
                                 {paper.title ? paper.title.slice(0, 20) + "..." : "Заголовок отсутствует"}
                             </a>
                         ))}

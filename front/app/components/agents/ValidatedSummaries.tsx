@@ -2,6 +2,7 @@ import {TextShimmerWave} from "@/components/ui/text-shimmer-wave";
 import {ListChecks} from "lucide-react";
 import {Badge} from "@/components/ui/badge";
 import {DataType} from "@/app/components/agents/types";
+import Image from "next/image";
 
 export default function ValidatedSummaries({data}: { data: DataType }) {
     return (
@@ -22,6 +23,7 @@ export default function ValidatedSummaries({data}: { data: DataType }) {
                                     className="text-[0.75em] !rounded-full"
                                     href={summary.source}
                                     target="_blank">
+                                    <Image unoptimized className="size-4" width={30} height={30} src={`https://www.google.com/s2/favicons?domain=${new URL(summary.source).hostname}&sz=64`} alt={summary.title} />
                                     {summary.title.slice(0, 20) + "..."}
                                 </a>
                             </Badge>
@@ -35,6 +37,7 @@ export default function ValidatedSummaries({data}: { data: DataType }) {
                                         href={summary.source}
                                         target="_blank"
                                     >
+                                        <Image unoptimized className="size-4" width={30} height={30} src={`https://www.google.com/s2/favicons?domain=${new URL(summary.source).hostname}&sz=64`} alt={summary.title} />
                                         {summary.title.slice(0, 20) + "..."}
                                     </a>
                                 </Badge>

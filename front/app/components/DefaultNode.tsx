@@ -15,7 +15,7 @@ import {
 import {Button} from "@/components/ui/button";
 import {Expand} from "lucide-react";
 
-const DISABLED_DIALOG_TYPES = ["upload_articles", "prompt", "critics"];
+const DISABLED_DIALOG_TYPES = ["upload_articles", "prompt", "critics", "refine_search_query"];
 
 function DefaultNode({id, type, data}: {
     id: string,
@@ -57,8 +57,8 @@ function DefaultNode({id, type, data}: {
                                     <div className="p-1 max-h-28 overflow-y-auto text-xs">
                                         <data.dataComponent data={data.streamedData}/>
                                     </div>
-                                    <div className="absolute cursor-pointer top-0 left-0 w-full h-full flex gap-2 items-center justify-center opacity-0 hover:opacity-100 hover:bg-black/50 transition-all text-white font-semibold text-xl rounded-sm">
-                                        <Expand/> Расширить
+                                    <div className="absolute cursor-pointer top-0 left-0 w-full h-full flex gap-1 items-center justify-center opacity-0 hover:opacity-100 hover:bg-black/50 transition-all text-white font-semibold text-xl rounded-sm">
+                                        <Expand className="size-5"/> Расширить
                                     </div>
                                 </CardContent>
                             </DialogTrigger>
