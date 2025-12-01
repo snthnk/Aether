@@ -2,7 +2,6 @@ import os
 import urllib
 import time
 from uuid import uuid4
-
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -59,7 +58,6 @@ def download_arxiv_html_article(article_id: str) -> Optional[str]:
         return None
 
 
-# ========================= ПЛАНИРОВЩИК ЗАПРОСОВ (ЦИКЛИЧЕСКИЙ) =========================
 class SearchQueryPlanner(BaseModel):
     queries: List[str] = Field(description="A list of 3-4 very short and concise search queries in English.")
 
@@ -123,7 +121,7 @@ def search_openalex_node(state: GraphState) -> GraphState:
         params = {
             'search': query,
             'mailto': your_email,
-            'per_page': 10  # Можно указать, сколько результатов на странице (макс. 200)
+            'per_page': 10
         }
         try:
             response = requests.get(url, params=params)
@@ -186,8 +184,6 @@ def search_arxiv_node(state: GraphState) -> GraphState:
     state['papers'] = all_results
     return state
 
-
-# ========================= УЗЕЛ СКАЧИВАНИЯ И СУММАРИЗАЦИИ =========================
 def fetch_and_summarize_node(state: GraphState) -> GraphState:
     print("\n--- 📥✍️ АГЕНТ-СУММАРИЗАТОР: СКАЧИВАЮ И ДЕЛАЮ РЕЗЮМЕ ---")
     papers = state['papers']
@@ -290,7 +286,6 @@ def fetch_and_summarize_node(state: GraphState) -> GraphState:
     return state
 
 
-# ========================= УЗЕЛ ВАЛИДАЦИИ РЕЗЮМЕ =========================
 def validate_summaries_node(state: GraphState) -> GraphState:
     print("\n--- ✅ АГЕНТ-ВАЛИДАТОР: ПРОВЕРЯЮ РЕЛЕВАНТНОСТЬ НОВЫХ РЕЗЮМЕ ---")
     original_query = state['current_search_request'].input_query if state['current_search_request'] else ""
@@ -339,7 +334,6 @@ def validate_summaries_node(state: GraphState) -> GraphState:
     return state
 
 
-# NEW: Узел для загрузки и обработки статей от пользователя
 async def upload_articles_node(state: GraphState) -> GraphState:
     """
     Предлагает пользователю загрузить свои PDF-файлы, извлекает из них текст,
@@ -360,22 +354,17 @@ async def upload_articles_node(state: GraphState) -> GraphState:
     newly_summarized = []
     for pdf in pdf_list:
         try:
-            # Извлечение текста из PDF
             with fitz.open(f"uploads/{pdf.id}.pdf", filetype="pdf") as doc:
                 text_content = "".join(page.get_text() for page in doc).strip()
-            # ---------------------------------
 
             if not text_content:
                 print("  [!] Не удалось извлечь текст из PDF.")
                 continue
 
             print("    [*] Текст успешно извлечен. Создаю резюме...")
-            # Создание резюме
             llm_response = summarizer_chain.invoke({"paper_text": text_content})
             summary_text = llm_response.content
 
-            # Формирование объекта статьи
-            # Имя файла используется как заголовок, а путь - как источник
             manual_article = {
                 "title": f"User-Uploaded: {pdf['name']}",
                 "authors": "Загружено Пользователем",
@@ -395,8 +384,6 @@ async def upload_articles_node(state: GraphState) -> GraphState:
     return state
 
 
-# ========================= УЗЕЛ ПРИНЯТИЯ РЕШЕНИЙ =========================
-# MODIFIED: Немного изменяем логику, чтобы она вела на новый узел
 def decide_to_continue_node(state: GraphState) -> str:
     print("\n--- 🤔 АГЕНТ-РЕШАТЕЛЬ: АНАЛИЗИРУЮ РЕЗУЛЬТАТЫ ---")
     validated_count = len(state['validated_summaries'])
@@ -404,7 +391,6 @@ def decide_to_continue_node(state: GraphState) -> str:
     print(f"  [i] Найдено релевантных статей: {validated_count} (цель: {MIN_VALIDATED_ARTICLES})")
     print(f"  [i] Прошло циклов поиска: {cycle_count} (лимит: {MAX_SEARCH_CYCLES})")
 
-    # NEW: Если включена ручная загрузка, всегда переходим к этому шагу
     if MANUAL_ARTICLE_UPLOAD_ENABLED:
         print("  [*] Перехожу к шагу ручной загрузки статей.")
         return "upload_articles"
@@ -420,7 +406,6 @@ def decide_to_continue_node(state: GraphState) -> str:
         return "continue_search"
 
 
-# NEW: Узел принятия решений ПОСЛЕ ручной загрузки
 def after_upload_decision_node(state: GraphState) -> str:
     print("\n--- 🤔 АГЕНТ-РЕШАТЕЛЬ (ПОСЛЕ ЗАГРУЗКИ): АНАЛИЗИРУЮ ИТОГИ ---")
     validated_count = len(state['validated_summaries'])
@@ -438,8 +423,6 @@ def after_upload_decision_node(state: GraphState) -> str:
         print("  [!] Даже с учетом загруженных, статей мало. Запускаю новый цикл поиска.")
         return "continue_search"
 
-
-# ========================= УЗЕЛ ПОДГОТОВКИ ФИНАЛЬНОГО ОТЧЕТА =========================
 def prepare_final_report_node(state: GraphState) -> GraphState:
     print("\n--- 📋 ГОТОВЛЮ ФИНАЛЬНЫЙ ОТЧЕТ ---")
     validated_summaries = state['validated_summaries']
@@ -470,10 +453,8 @@ def prepare_final_report_node(state: GraphState) -> GraphState:
     return state
 
 
-# --- 5. СБОРКА И ЗАПУСК ГРАФА ---
 def compile_workflow():
     workflow = StateGraph(GraphState)
-    # Определяем все УЗЛЫ-ДЕЙСТВИЯ, которые обновляют состояние
     workflow.add_node("plan_search_queries", plan_search_queries_node)
     workflow.add_node("search_openalex", search_openalex_node)
     workflow.add_node("search_arxiv", search_arxiv_node)
@@ -481,18 +462,12 @@ def compile_workflow():
     workflow.add_node("validate_summaries", validate_summaries_node)
     workflow.add_node("prepare_final_report", prepare_final_report_node)
     workflow.add_node("upload_articles", upload_articles_node)
-
-    # Функции-маршрутизаторы (decide_to_continue_node, after_upload_decision_node)
-    # НЕ добавляются как узлы. Они используются только для определения условных переходов.
-
-    # Определяем поток выполнения графа
     workflow.set_entry_point("plan_search_queries")
     workflow.add_edge("plan_search_queries", "search_openalex")
     workflow.add_edge("search_openalex", "search_arxiv")
     workflow.add_edge("search_arxiv", "fetch_and_summarize")
     workflow.add_edge("fetch_and_summarize", "validate_summaries")
 
-    # После валидации, `decide_to_continue_node` определяет следующий шаг
     workflow.add_conditional_edges(
         "validate_summaries",
         decide_to_continue_node,
@@ -503,9 +478,8 @@ def compile_workflow():
         }
     )
 
-    # После ручной загрузки, `after_upload_decision_node` определяет следующий шаг
     workflow.add_conditional_edges(
-        "upload_articles",  # Источник - узел, который только что завершился
+        "upload_articles",
         after_upload_decision_node,
         {
             "continue_search": "plan_search_queries",
@@ -523,22 +497,18 @@ async def node_make_research(state: GraphState) -> Dict:
     Основной узел-обертка для поискового модуля.
     Запускает под-граф поиска и обновляет основное состояние.
     """
-    # Запускаем под-граф поиска
     final_report, request = await make_research(state['current_search_request'].input_query, state)
 
-    # Возвращаем словарь для обновления состояния основного графа
     return {
-        'current_search_request': None,  # Сбрасываем текущий запрос
+        'current_search_request': None,
         'papers': [],
         'summaries': [],
         'validated_summaries': [],
-        'final_report': final_report,  # Это поле сейчас не используется дальше, но оставим для консистентности
-        # 'search_history' уже обновлен внутри make_research, поэтому его не трогаем
+        'final_report': final_report,
     }
 
 
 async def make_research(query, state: GraphState) -> tuple[str, SearchRequest]:
-    # Устанавливаем начальное состояние для под-графа
     initial_search_state = state.copy()
     initial_search_state['current_search_request'] = SearchRequest(input_query=query)
     app = compile_workflow()
@@ -551,7 +521,6 @@ async def make_research(query, state: GraphState) -> tuple[str, SearchRequest]:
 
     async for event in app.astream(initial_search_state, config={"recursion_limit": recursion_limit}):
         for node_name, state_update in event.items():
-            # Обновляем состояние основного графа результатами из под-графа
             for key, value in state_update.items():
                 if key in state:
                     state[key] = value
@@ -561,7 +530,6 @@ async def make_research(query, state: GraphState) -> tuple[str, SearchRequest]:
 
     if final_state_data:
         final_report = final_state_data.get('final_report', "Отчет не был сгенерирован.")
-        # `search_history` в `state` уже должен быть обновлен
         last_search_request = next((s for s in reversed(state.get('search_history', [])) if s.input_query == query),
                                    None)
         return final_report, last_search_request
