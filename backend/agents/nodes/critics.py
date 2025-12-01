@@ -1,5 +1,3 @@
-## MODIFIED ##
-
 import asyncio
 import requests
 from backend.llm.llms import llm
@@ -18,13 +16,11 @@ from backend.agents.constants import SURGICAL_SEARCH_FETCH_COUNT, SURGICAL_SEARC
 from backend.websocket_manager import manager
 
 
-# --- Pydantic models for structured output ---
 class SurgicalSelectionOutput(BaseModel):
     selected_ids: List[str] = Field(description="A list of paper IDs that are most relevant to the hypothesis.")
 
 
 class CritiquePanel:
-    # Store prompts as class attributes
     _INNOVATOR_PROMPT_TEMPLATE = INNOVATOR_PROMPT_TEMPLATE
     _PRAGMATIST_PROMPT_TEMPLATE = PRAGMATIST_PROMPT_TEMPLATE
     _STRATEGIST_PROMPT_TEMPLATE = STRATEGIST_PROMPT_TEMPLATE
@@ -44,9 +40,8 @@ class CritiquePanel:
             response = await chain.ainvoke(kwargs)
             return response.content
         except Exception as e:
-            # MODIFIED: More informative error logging
             print(f"\n--- ERROR in {critic_name} Critic ---\n{e}\n--------------------")
-            await asyncio.sleep(20)  # Wait before retry
+            await asyncio.sleep(20)
             try:
                 response = await chain.ainvoke(kwargs)
                 return response.content
@@ -58,7 +53,6 @@ class CritiquePanel:
         """
         Performs a focused, multi-step search to find prior art for a hypothesis.
         """
-        # This part of the logic remains unchanged, as it was working well.
         print("    -> [Surgical Search] Starting process...")
         query_gen_prompt = "Analyze the following hypothesis and formulate an ideal, concise search query (3-5 keywords in English) to find articles that could disprove its novelty. Do not add any explanations, only provide the query itself.\n\nHypothesis: {hypothesis_text}"
         query_chain = ChatPromptTemplate.from_template(query_gen_prompt) | self.llm
@@ -155,7 +149,6 @@ class CritiquePanel:
             for s in source_materials
         ) if source_materials else "Исходные материалы не предоставлены."
 
-        # Create concurrent tasks for all critics
         tasks = {
             "Innovator": self._run_innovator(hypothesis, source_materials_text),
             "Pragmatist": self._run_pragmatist(hypothesis),
@@ -166,7 +159,6 @@ class CritiquePanel:
         results = await asyncio.gather(*tasks.values())
         critique_results = dict(zip(tasks.keys(), results))
 
-        # MODIFIED: Structured logging to prevent interleaved output
         print(f"\n--- [HYPOTHESIS #{hypothesis_index + 1}] CRITIQUE RESULTS ---")
         for critic, result in critique_results.items():
             print(f"\n--- {critic}'s Verdict ---")
@@ -180,7 +172,7 @@ class CritiquePanel:
             innovator_critique=critique_results["Innovator"],
             pragmatist_critique=critique_results["Pragmatist"],
             strategist_critique=critique_results["Strategist"],
-            nitpicker_critique=critique_results["Nitpicker"]  # MODIFIED: Pass Nitpicker critique
+            nitpicker_critique=critique_results["Nitpicker"]
         )
         print(f"--- [HYPOTHESIS #{hypothesis_index + 1}] Synthesizer Finished ---")
         print("===== ANALYSIS COMPLETE =====\n")
@@ -204,8 +196,7 @@ async def _critique_logic(state: GraphState) -> dict:
 
     tasks, hypotheses_to_critique = [], []
     for i, hyp in enumerate(latest_hypotheses_list):
-        if not hyp.critique:  # Only critique new hypotheses
-            # MODIFIED: Pass index for better logging
+        if not hyp.critique:
             tasks.append(panel.run_full_analysis(i, hyp.formulation, source_materials))
             hypotheses_to_critique.append(hyp)
 
@@ -227,7 +218,6 @@ async def _critique_logic(state: GraphState) -> dict:
             hyp.is_approved = False
             print(f"-> [Critique Panel Verdict] Hypothesis REJECTED: '{hyp.formulation[:50]}...'")
 
-    # --- NEW: HUMAN-IN-THE-LOOP FEEDBACK STAGE ---
     if HUMAN_IN_THE_LOOP_ENABLED and hypotheses_to_critique:
         print("\n\n" + "=" * 40 + " HUMAN-IN-THE-LOOP FEEDBACK " + "=" * 40)
         print("Вы можете добавить свои комментарии к каждой гипотезе.")
@@ -236,7 +226,6 @@ async def _critique_logic(state: GraphState) -> dict:
         for i, hyp in enumerate(latest_hypotheses_list):
             print("\n" + "-" * 35 + f" Гипотеза #{i + 1} " + "-" * 35)
 
-            # Показываем формулировку и уже сгенерированную критику
             formulation_text = hyp.formulation.content if hasattr(hyp.formulation, 'content') else hyp.formulation
             critique_text = hyp.critique.content if hasattr(hyp.critique, 'content') else hyp.critique
 
@@ -251,14 +240,9 @@ async def _critique_logic(state: GraphState) -> dict:
                 "critique": critique_text
             })
 
-            # Запрашиваем комментарий пользователя
-            # user_comment = input(
-            #     f"\n> Ваш комментарий для гипотезы #{i + 1} (нажмите Enter, чтобы пропустить): ").strip()
-
             user_comment = await websocket.receive_text()
 
             if user_comment:
-                # Добавляем комментарий пользователя в специальном формате, который поймет Формулятор
                 user_feedback_block = f"\n\n<USER_COMMENT>\n{user_comment}\n</USER_COMMENT>"
                 hyp.critique += user_feedback_block
                 print("  [+] Ваш комментарий добавлен.")
