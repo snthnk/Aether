@@ -23,7 +23,6 @@ class GraphState(MessagesState):
     hypotheses_and_critics: List[List[Hypothesis]]
     last_goto: str
 
-    # Дополнительные поля для работы поисковика
     search_system_input: Optional[str]
     current_search_request: Optional[SearchRequest]
     papers: List[Dict]
@@ -31,7 +30,6 @@ class GraphState(MessagesState):
     validated_summaries: List[Dict]
     final_report: Optional[str]
     error: Optional[str]
-    # search_cycles используется внутри поискового графа, поэтому его нужно оставить
     search_cycles: int
     client_id: str
 
@@ -45,7 +43,6 @@ class SearchQueryPlannerOutput(BaseModel):
         description="Список из 3-5 альтернативных и разнообразных поисковых запросов для нахождения статей.")
 
 
-# MODIFIED: Simplified the model as the decision logic is removed.
 class HypothesesList(BaseModel):
     """Pydantic model for the output of the hypothesis formulator."""
     hypotheses: List[str] = Field(
@@ -62,11 +59,8 @@ def format_search_history(search_history: list[SearchRequest], limit: int = 5) -
         return "No search history available."
 
     res_parts = []
-    # Используем словарь для отслеживания уже добавленных статей по заголовку,
-    # чтобы избежать дублирования в разных циклах поиска.
     seen_titles = set()
 
-    # Итерируемся в обратном порядке, чтобы самые свежие результаты были первыми.
     for i, search in enumerate(reversed(search_history[-limit:])):
         res_parts.append(f"## Search Cycle Result (Query: '{search.input_query}')\n")
 
@@ -74,23 +68,18 @@ def format_search_history(search_history: list[SearchRequest], limit: int = 5) -
         for paper in search.results:
             title = paper.get('title', 'N/A').strip()
             if title in seen_titles:
-                continue  # Пропускаем дубликаты
+                continue
             seen_titles.add(title)
 
-            # Создаем более читаемый тег для цитирования
-            # Пример: [Smith et al., 2021]
             authors_list = paper.get('authors', 'Unknown Author').split(',')
-            first_author = authors_list[0].split()[-1]  # Фамилия первого автора
-            # Извлекаем год из источника, если возможно (упрощенная логика)
+            first_author = authors_list[0].split()[-1]
             source_link = paper.get('source', '')
             year = 'N/A'
             if 'arxiv' in source_link:
-                # Пытаемся извлечь год из arxiv id, например 2103.12345 -> 2021
                 match = re.search(r'/abs/(\d{2})', source_link)
                 if match:
                     year = f"20{match.group(1)}"
 
-            # Финальный тег
             citation_tag = f"[{first_author} et al., {year}]"
 
             papers_in_cycle.append(
@@ -98,7 +87,6 @@ def format_search_history(search_history: list[SearchRequest], limit: int = 5) -
                 f"- Title: {title}\n"
                 f"- Link: {source_link}\n"
                 f"- Summary: {paper.get('summary', 'No summary available.').replace(chr(10), ' ')}\n"
-                # Заменяем переносы строк на пробелы
             )
 
         if not papers_in_cycle:
