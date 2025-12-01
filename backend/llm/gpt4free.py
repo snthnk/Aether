@@ -26,7 +26,6 @@ class GPT4Free(BaseChatModel):
             elif isinstance(message, AIMessage):
                 g4f_messages.append({"role": "assistant", "content": message.content})
             else:
-                # Handle other message types as user messages
                 g4f_messages.append({"role": "user", "content": message.content})
         return g4f_messages
 
@@ -46,7 +45,6 @@ class GPT4Free(BaseChatModel):
         )
 
         message = response.choices[0].message.content
-        # Добавляем перенос строки в конце сообщения
         if message and not message.endswith('\n'):
             message += '\n'
         return ChatResult(
@@ -60,7 +58,6 @@ class GPT4Free(BaseChatModel):
             **kwargs,
     ) -> ChatResult:
         """Asynchronous generation method"""
-        # Run the synchronous method in a thread pool
         return await asyncio.get_event_loop().run_in_executor(
             None, self._generate, messages, stop
         )
@@ -73,9 +70,7 @@ class GPT4Free(BaseChatModel):
     ) -> AsyncGenerator[ChatGenerationChunk, None]:
         g4f_messages = self._convert_messages_to_g4f_format(messages)
 
-        # Запуск стрима
         try:
-            # Используем синхронный вызов, но оборачиваем его в async generator
             response = self._client.chat.completions.create(
                 model=self.model,
                 messages=g4f_messages,
@@ -89,28 +84,22 @@ class GPT4Free(BaseChatModel):
                 if hasattr(chunk, 'choices') and chunk.choices:
                     delta = chunk.choices[0].delta
                     if hasattr(delta, 'content') and delta.content:
-                        # Возвращаем по стандарту LangChain: AIMessageChunk → ChatGenerationChunk
                         yield ChatGenerationChunk(message=AIMessageChunk(content=delta.content))
                         last_chunk_yielded = True
-                        # Добавляем небольшую задержку для лучшего стриминга
 
-            # Добавляем перенос строки в конце сообщения
             if last_chunk_yielded:
                 yield ChatGenerationChunk(message=AIMessageChunk(content='\n'))
 
         except Exception as e:
-            # Fallback to non-streaming if streaming fails
             print(f"Streaming failed, falling back to non-streaming: {e}")
             result = await self._agenerate(messages, stop, **kwargs)
             content = result.generations[0].message.content
-            # Simulate streaming by yielding word by word
             words = content.split()
             for i, word in enumerate(words):
                 if i == 0:
                     yield ChatGenerationChunk(message=AIMessageChunk(content=word))
                 else:
                     yield ChatGenerationChunk(message=AIMessageChunk(content=" " + word))
-            # Добавляем перенос строки в конце fallback сообщения
             yield ChatGenerationChunk(message=AIMessageChunk(content='\n'))
 
     def _stream(
@@ -139,7 +128,6 @@ class GPT4Free(BaseChatModel):
                         yield ChatGenerationChunk(message=AIMessageChunk(content=delta.content))
                         last_chunk_yielded = True
 
-            # Добавляем перенос строки в конце сообщения
             if last_chunk_yielded:
                 yield ChatGenerationChunk(message=AIMessageChunk(content='\n'))
 
@@ -147,7 +135,6 @@ class GPT4Free(BaseChatModel):
             print(f"Sync streaming failed, falling back to non-streaming: {e}")
             result = self._generate(messages, stop, **kwargs)
             content = result.generations[0].message.content
-            # Simulate streaming by yielding the entire content at once
             yield ChatGenerationChunk(message=AIMessageChunk(content=content))
 
     @property
