@@ -102,13 +102,9 @@ def end_node(state: GraphState) -> dict:
     """Финальный узел, который завершает работу и выводит итоговый отчет по гипотезам."""
     print("\n\n" + "=" * 40 + " FINAL REPORT " + "=" * 40)
 
-    # --- START: LOGIC TO MAP CITATIONS TO PAPERS ---
-    # 1. Создаем словарь для быстрого поиска статей по тегу цитирования
     all_papers_by_tag = {}
     search_history = state.get('search_history', [])
     for search in search_history:
-        # 2. Воссоздаем тег цитирования точно так же, как в format_search_history
-        # ИСПРАВЛЕНИЕ: Используем search.results вместо search.get('results', [])
         for paper in search.results:
             authors_list = paper.get('authors', 'Unknown Author').split(',')
             first_author = authors_list[0].strip().split()[-1] if authors_list[0].strip() else "N/A"
@@ -120,8 +116,7 @@ def end_node(state: GraphState) -> dict:
                     year = f"20{match.group(1)}"
 
             citation_tag = f"[{first_author} et al., {year}]"
-            all_papers_by_tag[citation_tag] = paper  # Сохраняем всю информацию о статье
-    # --- END: LOGIC ---
+            all_papers_by_tag[citation_tag] = paper
 
     hypotheses_and_critics = state.get('hypotheses_and_critics')
     if not hypotheses_and_critics:
@@ -175,7 +170,6 @@ def end_node(state: GraphState) -> dict:
                         "title": "(Источник не найден)",
                         "link": None,
                     })
-        # --- END: LOGIC ---
 
         critique_obj = {}
 
@@ -187,7 +181,6 @@ def end_node(state: GraphState) -> dict:
             recommendations_match = re.search(r"Recommendations for Implementation:(.*?)Final Verdict:",
                                               critique_text, re.DOTALL | re.IGNORECASE)
 
-            # Fallback to older format if new one fails
             if not summary_match:
                 summary_match = re.search(r"Executive Summary:(.*?)Strengths:", critique_text,
                                           re.DOTALL | re.IGNORECASE)
@@ -349,10 +342,10 @@ fastapi = FastAPI()
 
 fastapi.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"]
+    allow_headers=["*"],
 )
 
 
