@@ -20,7 +20,7 @@
 ### Состав команды
 *   [Арсений Новожилов](https://github.com/snthnk) (автор репозитория) — ML/Backend, архитектура децентрализованной системы, переработка агентов под децентрализованную архитектуру.
 *   [Иван Житин](https://github.com/WaterMelon12365) — ML/Backend, разработка агента-оркестратора.
-*   [Артём Артёмов](https://github.com/artemsnite) — Frontend/Backend.
+*   [Артём Артёмов](https://github.com/artemsnite) — Frontend/Backend, разработка веб-интерфейса и серверной части сервиса.
 *   [Марк Мещеряков](https://github.com/markzum) — ML/Backend, разработка агента формулировщика.
 *   [Данил Куликов](https://github.com/ArseniyNov52) — ML/Backend, разработка агентов критиков.
 
